@@ -25,6 +25,9 @@ import re
 from datetime import datetime
 import subprocess
 
+# Work out whether the user wants gooey before gooey has a chance to strip the argument
+gui = '--gui' in sys.argv
+
 def add_arguments(parser):
     parser.description = "Replay twitter file processing"
 
@@ -43,7 +46,7 @@ def add_arguments(parser):
     advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
                                help='Depth of command history to replay.')
 
-    parser.set_defaults(func=twitterReplay)
+    parser.set_defaults(func=csvReplay)
 
 @gooey.Gooey(ignore_command=None, force_command='--gui',
              default_cols=1,
@@ -51,16 +54,41 @@ def add_arguments(parser):
 def parse_arguments():
     parser = gooey.GooeyParser()
     add_arguments(parser)
-    #args, extraargs = parser.parse_known_args()
-    #args.extraargs = extraargs
     args = parser.parse_args()
     args.extraargs = []
+    return vars(args)
+
+# Need to replicate this because parse_known_args doesn't work with gooey
+def parse_arguments_no_gooey():
+    parser = argparse.ArgumentParser()
+
+    parser.description = "Replay twitter file processing"
+
+    replaygroup = parser.add_argument_group('Replay')
+    replaygroup.add_argument('input_file', type=str, nargs='*',
+                             help='CSV files to replay.')
+    replaygroup.add_argument('-f', '--force',   action='store_true',
+                             help='Replay even if infile is not older than its dependents.')
+    replaygroup.add_argument(      '--dry-run', action='store_true',
+                             help='Print but do not execute command')
+    replaygroup.add_argument(      '--edit', action='store_true',
+                             help='Open a Gooey window to allow editing before running command')
+
+    advancedgroup = parser.add_argument_group('Advanced')
+    advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
+    advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
+                               help='Depth of command history to replay.')
+
+    parser.set_defaults(func=csvReplay)
+
+    args, extraargs = parser.parse_known_args()
+    args.extraargs = extraargs
     return vars(args)
 
 def build_comments(kwargs):
     return ''
 
-def twitterReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs, **dummy):
+def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs, **dummy):
     fileregexp = re.compile(r"^#+ (?P<file>.+) #+$", re.UNICODE)
     cmdregexp  = re.compile(r"^#\s+(?P<cmd>[\w\.-]+)", re.UNICODE)
     argregexp  = re.compile(r"^#\s+(?:--)?(?P<name>[\w-]+)(?:=(?P<quote>\"?)(?P<value>.+)(?P=quote))?", re.UNICODE)
@@ -194,5 +222,9 @@ def twitterReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs,
                 pipestack = None
 
 if __name__ == '__main__':
-    kwargs = parse_arguments()
-    kwargs['func'](**kwargs)
+    if gui:
+        kwargs = parse_arguments()
+        kwargs['func'](**kwargs)
+    else:
+        kwargs = parse_arguments_no_gooey()
+        kwargs['func'](**kwargs)
