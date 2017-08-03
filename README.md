@@ -1,6 +1,6 @@
 # csvProcess
 
-These Python scripts for manipulating [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) files were orginally written as part of [twitterScrape](https://github.com/BarraQDA/twitterScrape). Since they have more general application I have moved them to their own library.
+These Python scripts for manipulating [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) files were originally written as part of [twitterScrape](https://github.com/BarraQDA/twitterScrape). Since they have more general application I have moved them to their own library.
 
 ## Features
 
