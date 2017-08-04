@@ -23,7 +23,6 @@ import os
 import shutil
 import unicodecsv
 import string
-import unicodedata
 import multiprocessing
 import pymp
 import re
@@ -92,7 +91,7 @@ def csvFilter(arglist):
     if args.infile is None:
         infile = sys.stdin
     else:
-        infile = file(args.infile, 'rU')
+        infile = open(args.infile, 'rU')
 
     # Skip comments at start of infile.
     incomments = ''
@@ -112,13 +111,13 @@ def csvFilter(arglist):
         if os.path.exists(args.outfile):
             shutil.move(args.outfile, args.outfile + '.bak')
 
-        outfile = file(args.outfile, 'w')
+        outfile = open(args.outfile, 'w')
 
     if args.rejfile:
         if os.path.exists(args.rejfile):
             shutil.move(args.rejfile, args.rejfile + '.bak')
 
-        rejfile = file(args.rejfile, 'w')
+        rejfile = open(args.rejfile, 'w')
 
     if args.no_comments:
         outcomments = None
@@ -181,14 +180,14 @@ def csvFilter(arglist):
 
     argbadchars = re.compile(r'[^0-9a-zA-Z_]')
     if args.filter:
-        exec "\
+        exec("\
 def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter in locals()
+    return " + args.filter, locals())
 
     if args.data:
-        exec "\
+        exec("\
 def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.data in locals()
+    return " + args.data, locals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)

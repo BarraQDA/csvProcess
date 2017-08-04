@@ -23,7 +23,6 @@ import os
 import shutil
 import unicodecsv
 import string
-import unicodedata
 import multiprocessing
 import pymp
 import re
@@ -56,7 +55,7 @@ def csvCollect(arglist):
     parser.add_argument('-in', '--interval',  type=str, help='Interval for measuring frequency, for example "1 day".')
 
     parser.add_argument('-H', '--header',     type=str, help='Comma-separated list of column names to create.')
-    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of lists to output as columns.')
+    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
     parser.add_argument('-n', '--number',     type=int, help='Maximum number of results to output')
@@ -116,7 +115,7 @@ def csvCollect(arglist):
     if args.infile is None:
         infile = sys.stdin
     else:
-        infile = file(args.infile, 'rU')
+        infile = open(args.infile, 'rU')
 
     # Collect comments and open infile.
     incomments = ''
@@ -136,7 +135,7 @@ def csvCollect(arglist):
         if os.path.exists(args.outfile):
             shutil.move(args.outfile, args.outfile + '.bak')
 
-        outfile = file(args.outfile, 'w')
+        outfile = open(args.outfile, 'w')
 
     if not args.no_comments:
         comments = ((' ' + args.outfile + ' ') if args.outfile else '').center(80, '#') + '\n'
@@ -164,18 +163,18 @@ def csvCollect(arglist):
     # Dynamic code for filter, data and score
     argbadchars = re.compile(r'[^0-9a-zA-Z_]')
     if args.filter:
-            exec "\
+            exec("\
 def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter in locals()
+    return " + args.filter, locals())
 
     if args.data:
-        exec "\
+        exec("\
 def evalcolumn(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + '\n'.join(args.data) in locals()
+    return " + '\n'.join(args.data), locals())
 
-    exec "\
+    exec("\
 def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join([scoreitem for scoreitem in args.score]) + "]" in locals()
+    return [" + ','.join([scoreitem for scoreitem in args.score]) + "]", locals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -255,9 +254,9 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
                         rowscore = evalscore(**rowargs)
 
                     if args.ignorecase:
-                        index = tuple(value.lower() for value in match)
+                        index = (match.lower(),)
                     else:
-                        index = tuple(value for value in match)
+                        index = (match,)
 
                     if args.interval:
                         indexes.append(index)
@@ -339,9 +338,9 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
                                 rowscore = evalscore(**rowargs)
 
                             if args.ignorecase:
-                                index = tuple(value.lower() for value in match)
+                                index = (match.lower(),)
                             else:
-                                index = tuple(value for value in match)
+                                index = (match,)
 
                             result[index] = map(add, result.get(index, [0] * len(args.score)), rowscore)
 
