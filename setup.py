@@ -3,12 +3,13 @@ from setuptools import setup
 setup(
     name = "csvProcess",
     packages = ["csvProcess"],
-    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "gooey", "python-dateutil", "pytimeparse"],
+    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "gooey==0.9.2.5+js", "python-dateutil", "pytimeparse"],
+    dependency_links=["git+https://github.com/jschultz/Gooey.git#egg=gooey-0.9.2.5+js"],
     python_requires = "<3",
     entry_points = {
-        "gui_scripts": ['csvReplay = csvProcess.csvReplay:csvReplay',
+        "gui_scripts": ['csvReplay =  csvProcess.csvReplay:main',
                         'csvCollect = csvProcess.csvCollect:csvCollect',
-                        'csvFilter = csvProcess.csvFilter:csvFilter']
+                        'csvFilter =  csvProcess.csvFilter:csvFilter']
         },
     version = "0.1",
     description = "Multi-threaded CSV processing tools",

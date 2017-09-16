@@ -32,7 +32,7 @@ def add_arguments(parser):
     parser.description = "Replay twitter file processing"
 
     replaygroup = parser.add_argument_group('Replay')
-    replaygroup.add_argument('input_file', type=str, nargs='*', widget='FileChooser',
+    replaygroup.add_argument('input_file', type=str, widget='FileChooser',
                              help='CSV files to replay.')
     replaygroup.add_argument('-f', '--force',   action='store_true',
                              help='Replay even if infile is not older than its dependents.')
@@ -47,6 +47,7 @@ def add_arguments(parser):
                                help='Depth of command history to replay.')
 
     parser.set_defaults(func=csvReplay)
+    parser.set_defaults(build_comments=build_comments)
 
 @gooey.Gooey(ignore_command=None, force_command='--gui',
              default_cols=1,
@@ -55,7 +56,6 @@ def parse_arguments():
     parser = gooey.GooeyParser()
     add_arguments(parser)
     args = parser.parse_args()
-    args.extraargs = []
     return vars(args)
 
 # Need to replicate this because parse_known_args doesn't work with gooey
@@ -65,7 +65,7 @@ def parse_arguments_no_gooey():
     parser.description = "Replay twitter file processing"
 
     replaygroup = parser.add_argument_group('Replay')
-    replaygroup.add_argument('input_file', type=str, nargs='*',
+    replaygroup.add_argument('input_file', type=str, nargs='+',
                              help='CSV files to replay.')
     replaygroup.add_argument('-f', '--force',   action='store_true',
                              help='Replay even if infile is not older than its dependents.')
@@ -80,6 +80,7 @@ def parse_arguments_no_gooey():
                                help='Depth of command history to replay.')
 
     parser.set_defaults(func=csvReplay)
+    parser.set_defaults(build_comments=build_comments)
 
     args, extraargs = parser.parse_known_args()
     args.extraargs = extraargs
@@ -88,11 +89,14 @@ def parse_arguments_no_gooey():
 def build_comments(kwargs):
     return ''
 
-def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs, **dummy):
+def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs=[], **dummy):
     fileregexp = re.compile(r"^#+ (?P<file>.+) #+$", re.UNICODE)
     cmdregexp  = re.compile(r"^#\s+(?P<cmd>[\w\.-]+)", re.UNICODE)
     argregexp  = re.compile(r"^#\s+(?:--)?(?P<name>[\w-]+)(?:=(?P<quote>\"?)(?P<value>.+)(?P=quote))?", re.UNICODE)
     piperegexp = re.compile(r"^#+$", re.UNICODE)
+
+    if not isinstance(input_file, list):    # Gooey can't handle input_file as list
+        input_file = [input_file]
 
     for infilename in input_file:
         if verbosity >= 1:
@@ -221,10 +225,13 @@ def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs, **d
             else:
                 pipestack = None
 
-if __name__ == '__main__':
+def main():
     if gui:
         kwargs = parse_arguments()
         kwargs['func'](**kwargs)
     else:
         kwargs = parse_arguments_no_gooey()
         kwargs['func'](**kwargs)
+
+if __name__ == '__main__':
+    main()

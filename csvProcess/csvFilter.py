@@ -28,7 +28,7 @@ import pymp
 import re
 from dateutil import parser as dateparser
 
-def csvFilter(arglist):
+def csvFilter(arglist=None):
 
     parser = argparse.ArgumentParser(description='CSV file processor.',
                                      fromfile_prefix_chars='@')

@@ -31,7 +31,7 @@ import calendar
 from pytimeparse.timeparse import timeparse
 from operator import sub, add
 
-def csvCollect(arglist):
+def csvCollect(arglist=None):
 
     parser = argparse.ArgumentParser(description='CSV data collection.',
                                      fromfile_prefix_chars='@')
