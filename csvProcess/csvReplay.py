@@ -38,7 +38,7 @@ def add_arguments(parser):
                              help='Replay even if infile is not older than its dependents.')
     replaygroup.add_argument(      '--dry-run', action='store_true',
                              help='Print but do not execute command')
-    replaygroup.add_argument(      '--edit', action='store_true',
+    replaygroup.add_argument(      '--edit', action='store_false',
                              help='Open a Gooey window to allow editing before running command')
 
     advancedgroup = parser.add_argument_group('Advanced')
