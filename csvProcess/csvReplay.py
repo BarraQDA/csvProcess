@@ -113,7 +113,7 @@ def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs=[], 
                 infile.close()
                 break
 
-        depth = 0
+        curdepth = 0
         replaystack = []
         commentline = comments.pop(0)
         filematch = fileregexp.match(commentline)
@@ -164,8 +164,8 @@ def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs=[], 
             if outfile:
                 replaystack.append((pipestack, infilelist, outfile))
 
-            depth += 1
-            if depth == depth:
+            curdepth += 1
+            if curdepth == depth:
                 break
 
             filematch = fileregexp.match(commentline) if commentline else None
