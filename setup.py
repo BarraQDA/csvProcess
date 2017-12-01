@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name = "csvProcess",
     packages = ["csvProcess"],
-    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "Gooey", "python-dateutil", "pytimeparse"],
+    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "Gooey==0.9.2.5+js", "python-dateutil", "pytimeparse"],
     dependency_links=["git+https://github.com/jschultz/Gooey.git#egg=gooey-0.9.2.5+js"],
     python_requires = "<3",
     entry_points = {
