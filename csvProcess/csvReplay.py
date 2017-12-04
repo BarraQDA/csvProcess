@@ -43,8 +43,8 @@ def add_arguments(parser):
 
     advancedgroup = parser.add_argument_group('Advanced')
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
-    advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
-                               help='Depth of command history to replay.')
+    advancedgroup.add_argument('-d', '--depth',     type=int,
+                               help='Depth of command history to replay, default is all.')
     advancedgroup.add_argument('-r', '--remove',   action='store_true',
                                help='Remove input file before replaying.')
 
@@ -78,7 +78,7 @@ def parse_arguments_no_gooey():
 
     advancedgroup = parser.add_argument_group('Advanced')
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
-    advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
+    advancedgroup.add_argument('-d', '--depth',     type=int,
                                help='Depth of command history to replay.')
     advancedgroup.add_argument('-r', '--remove',   action='store_true',
                                help='Remove input file before replaying.')
@@ -174,7 +174,7 @@ def csvReplay(input_file, force, dry_run, edit,
                 replaystack.append((pipestack, infilelist, outfile))
 
             curdepth += 1
-            if curdepth == depth:
+            if depth and curdepth == depth:
                 break
 
             filematch = fileregexp.match(commentline) if commentline else None
