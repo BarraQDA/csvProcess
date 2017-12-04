@@ -1,0 +1,6 @@
+git+git://github.com/jschultz/Gooey.git
+unicodecsv
+pymp-pypi
+python-dateutil
+pytimeparse
+subprocess32
