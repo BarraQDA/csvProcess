@@ -33,9 +33,9 @@ def add_arguments(parser):
 
     replaygroup = parser.add_argument_group('Replay')
     replaygroup.add_argument('input_file', type=str, widget='FileChooser',
-                             help='CSV files to replay.')
+                             help='File to replay.')
     replaygroup.add_argument('-f', '--force',   action='store_true',
-                             help='Replay even if infile is not older than its dependents.')
+                             help='Replay even if input file is not older than its dependents.')
     replaygroup.add_argument(      '--dry-run', action='store_true',
                              help='Print but do not execute command')
     replaygroup.add_argument(      '--edit', action='store_false',
@@ -45,6 +45,8 @@ def add_arguments(parser):
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
     advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
                                help='Depth of command history to replay.')
+    advancedgroup.add_argument('-r', '--remove',   action='store_true',
+                               help='Remove input file before replaying.')
 
     parser.set_defaults(func=csvReplay)
     parser.set_defaults(build_comments=build_comments)
@@ -78,6 +80,8 @@ def parse_arguments_no_gooey():
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
     advancedgroup.add_argument('-d', '--depth',     type=int, default=1,
                                help='Depth of command history to replay.')
+    advancedgroup.add_argument('-r', '--remove',   action='store_true',
+                               help='Remove input file before replaying.')
 
     parser.set_defaults(func=csvReplay)
     parser.set_defaults(build_comments=build_comments)
@@ -89,7 +93,9 @@ def parse_arguments_no_gooey():
 def build_comments(kwargs):
     return ''
 
-def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs=[], **dummy):
+def csvReplay(input_file, force, dry_run, edit,
+              verbosity, depth, remove,
+              extraargs=[], **dummy):
     fileregexp = re.compile(r"^#+ (?P<file>.+) #+$", re.UNICODE)
     cmdregexp  = re.compile(r"^#\s+(?P<cmd>[\w\.-]+)", re.UNICODE)
     argregexp  = re.compile(r"^#\s+(?:--)?(?P<name>[\w-]+)(?:=(?P<quote>\"?)(?P<value>.+)(?P=quote))?", re.UNICODE)
@@ -112,6 +118,9 @@ def csvReplay(input_file, verbosity, depth, force, dry_run, edit, extraargs=[], 
             else:
                 infile.close()
                 break
+
+        if remove:
+            os.remove(infilename)
 
         curdepth = 0
         replaystack = []
