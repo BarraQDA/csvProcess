@@ -7,9 +7,10 @@ setup(
     dependency_links=["git+https://github.com/jschultz/Gooey.git#egg=gooey-0.9.2.5+js"],
     python_requires = "<3",
     entry_points = {
-        "gui_scripts": ['csvReplay =  csvProcess.csvReplay:main',
+        "gui_scripts": ['csvReplay  = csvProcess.csvReplay:main',
                         'csvCollect = csvProcess.csvCollect:csvCollect',
-                        'csvFilter =  csvProcess.csvFilter:csvFilter']
+                        'csvCloud   = csvProcess.csvCloud:csvCloud']
+                        'csvFilter  = csvProcess.csvFilter:csvFilter']
         },
     version = "0.1",
     description = "Multi-threaded CSV processing tools",
