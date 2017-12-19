@@ -9,7 +9,7 @@ setup(
     entry_points = {
         "gui_scripts": ['csvReplay  = csvProcess.csvReplay:main',
                         'csvCollect = csvProcess.csvCollect:csvCollect',
-                        'csvCloud   = csvProcess.csvCloud:csvCloud']
+                        'csvCloud   = csvProcess.csvCloud:csvCloud',
                         'csvFilter  = csvProcess.csvFilter:csvFilter']
         },
     version = "0.1",
