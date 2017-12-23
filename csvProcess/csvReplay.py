@@ -46,7 +46,7 @@ def add_arguments(parser):
     advancedgroup.add_argument('-d', '--depth',     type=int,
                                help='Depth of command history to replay, default is all.')
     advancedgroup.add_argument('-r', '--remove',   action='store_true',
-                               help='Remove input file before replaying.')
+                               help='Remove file before replaying.')
 
     parser.set_defaults(func=csvReplay)
     parser.set_defaults(build_comments=build_comments)
@@ -68,7 +68,7 @@ def parse_arguments_no_gooey():
 
     replaygroup = parser.add_argument_group('Replay')
     replaygroup.add_argument('input_file', type=str, nargs='+',
-                             help='CSV files to replay.')
+                             help='Files to replay.')
     replaygroup.add_argument('-f', '--force',   action='store_true',
                              help='Replay even if infile is not older than its dependents.')
     replaygroup.add_argument(      '--dry-run', action='store_true',
@@ -81,7 +81,7 @@ def parse_arguments_no_gooey():
     advancedgroup.add_argument('-d', '--depth',     type=int,
                                help='Depth of command history to replay.')
     advancedgroup.add_argument('-r', '--remove',   action='store_true',
-                               help='Remove input file before replaying.')
+                               help='Remove file before replaying.')
 
     parser.set_defaults(func=csvReplay)
     parser.set_defaults(build_comments=build_comments)
