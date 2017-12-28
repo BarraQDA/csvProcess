@@ -47,7 +47,7 @@ def csvCollect(arglist=None):
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
     parser.add_argument('-c', '--column',     type=str, help='Column to apply regular expression, default is "text"')
-    parser.add_argument('-r', '--regexp',     type=str, help='Regular expression to create output columns.')
+    parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create output columns.')
     parser.add_argument('-i', '--ignorecase', action='store_true', help='Ignore case in regular expression')
     parser.add_argument('-s', '--score',      type=str, nargs="*", default=['1'], help='Python expression(s) to evaluate row score(s), for example "1 + retweets + favorites"')
     parser.add_argument('-t', '--threshold',  type=float, help='Threshold (first) score for result to be output')
@@ -158,7 +158,7 @@ def csvCollect(arglist=None):
                 elif val is not None:
                     comments += '#     --' + arg + '=' + str(val) + '\n'
 
-        outfile.write(comments + incomments)
+        outfile.write((comments + incomments).encode('utf8'))
 
     # Dynamic code for filter, data and score
     argbadchars = re.compile(r'[^0-9a-zA-Z_]')
@@ -229,7 +229,7 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
             rowscore = None
             indexes = []
             if args.regexp:
-                matches = regexp.finditer(unicode(row[args.column]))
+                matches = regexp.finditer(row[args.column])
                 for match in matches:
                     if not rowscore:
                         rowscore = evalscore(**rowargs)
@@ -318,7 +318,7 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
 
                     rowscore = None
                     if args.regexp:
-                        matches = regexp.finditer(unicode(row[args.column]))
+                        matches = regexp.finditer(row[args.column])
                         rowscore = None
                         for match in matches:
                             if not rowscore:

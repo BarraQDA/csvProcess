@@ -148,12 +148,12 @@ def csvFilter(arglist=None):
             outcomments = '#' * 80 + '\n'
 
         outcomments += comments + incomments
-        outfile.write(outcomments)
+        outfile.write(outcomments.encode('utf8'))
 
         if args.rejfile:
             rejcomments = (' ' + args.rejfile + ' ').center(80, '#') + '\n'
             rejcomments += comments + incomments
-            rejfile.write(rejcomments)
+            rejfile.write(rejcomments.encode('utf8'))
 
     # If no columns specified, assume we mean copy columns from infile
     if not(args.exclude or bool(args.header) or bool(regexpfields)):
@@ -207,7 +207,7 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
             if args.filter:
                 keep = evalfilter(**rowargs) or False
             if keep and args.regexp:
-                regexpmatch = regexp.match(unicode(row[args.column]))
+                regexpmatch = regexp.match(row[args.column])
                 keep = regexpmatch or False
             if keep and (since or until):
                 date = row.get('date')
@@ -284,7 +284,7 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
                     if args.filter:
                         keep = evalfilter(**rowargs) or False
                     if keep and args.regexp:
-                        regexpmatch = regexp.match(unicode(row[args.column]))
+                        regexpmatch = regexp.match(row[args.column])
                         keep = regexpmatch or False
                     if keep and (since or until):
                         date = row.get('date')
