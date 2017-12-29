@@ -50,8 +50,8 @@ def csvFilter(arglist=None):
 
     parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
     parser.add_argument('-x', '--exclude',    type=str, help='If specified, copy all columns from input file except those in this comma-separated list')
-    parser.add_argument('-H', '--header',     type=str, help='Comma-separated list of column names to create.')
-    parser.add_argument('-d', '--data',       type=str, help='Python code to produce dict to fill or overwrite columns.')
+    parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
+    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
     parser.add_argument(      '--rejfile',    type=str, help='Output CSV file for rejected rows')
@@ -77,7 +77,7 @@ def csvFilter(arglist=None):
         if args.verbosity >= 1:
             print("Executing prelude code.", file=sys.stderr)
 
-        exec(os.linesep.join(args.prelude)) in globals()
+        exec(os.linesep.join(args.prelude), globals())
 
     if args.regexp:
         regexp = re.compile(args.regexp, re.UNICODE | (re.IGNORECASE if args.ignorecase else 0))
@@ -93,15 +93,18 @@ def csvFilter(arglist=None):
     else:
         infile = open(args.infile, 'rU')
 
-    # Skip comments at start of infile.
+    # Read comments at start of infile.
     incomments = ''
     while True:
-        line = infile.readline()
+        line = infile.readline().decode('utf8')
         if line[:1] == '#':
             incomments += line
         else:
             infieldnames = next(unicodecsv.reader([line]))
             break
+
+    if not incomments:
+        incomments = '#' * 80
 
     inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
 
@@ -165,7 +168,7 @@ def csvFilter(arglist=None):
     elif args.copy:
         outfieldnames += infieldnames
     if args.header:
-        outfieldnames += [fieldname for fieldname in args.header.split(',') if fieldname not in outfieldnames]
+        outfieldnames += [fieldname for fieldname in args.header if fieldname not in outfieldnames]
     if regexpfields:
         outfieldnames += [fieldname for fieldname in regexpfields if fieldname not in outfieldnames]
 
@@ -178,16 +181,18 @@ def csvFilter(arglist=None):
         if not args.no_header:
             rejcsv.writeheader()
 
-    argbadchars = re.compile(r'[^0-9a-zA-Z_]')
+    def clean(v):
+        return re.sub('\W|^(?=\d)','_', v)
+
     if args.filter:
         exec("\
-def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter, locals())
+def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.filter, globals())
 
     if args.data:
         exec("\
-def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.data, locals())
+def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return [" + ','.join(args.data) + "]", globals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -202,7 +207,7 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
                 break
             inrowcount += 1
 
-            rowargs = {argbadchars.sub('_', key): value for key, value in row.iteritems()}
+            rowargs = {clean(key): value for key, value in row.iteritems()}
             keep = True
             if args.filter:
                 keep = evalfilter(**rowargs) or False
@@ -225,8 +230,11 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
             if args.regexp and regexpmatch:
                 outrow.update({regexpfield: regexpmatch.group(regexpfield) for regexpfield in regexpfields})
             if args.data:
-                datadict = evaldata(**rowargs)
-                outrow.update(datadict)
+                rowdata = evaldata(**rowargs)
+                idx = 0
+                for col in args.header:
+                    outrow[col] = rowdata[idx]
+                    idx += 1
 
             if keep != args.invert:
                 outcsv.writerow(outrow)
@@ -279,7 +287,7 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
                 for rowindex in p.range(0, rowcount):
                     row = rows[rowindex]
 
-                    rowargs = {argbadchars.sub('_', key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.iteritems()}
                     keep = True
                     if args.filter:
                         keep = evalfilter(**rowargs) or False
@@ -302,8 +310,11 @@ def evaldata(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infi
                     if args.regexp and regexpmatch:
                         outrow.update({regexpfield: regexpmatch.group(regexpfield) for regexpfield in regexpfields})
                     if args.data:
-                        datadict = evaldata(**rowargs)
-                        outrow.update(datadict)
+                        rowdata = evaldata(**rowargs)
+                        idx = 0
+                        for col in args.header:
+                            outrow[col] = rowdata[idx]
+                            idx += 1
 
                     if keep != args.invert:
                         result[row['_Id']] = outrow

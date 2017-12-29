@@ -54,7 +54,7 @@ def csvCollect(arglist=None):
 
     parser.add_argument('-in', '--interval',  type=str, help='Interval for measuring frequency, for example "1 day".')
 
-    parser.add_argument('-H', '--header',     type=str, help='Comma-separated list of column names to create.')
+    parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
     parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
@@ -89,8 +89,7 @@ def csvCollect(arglist=None):
         if args.verbosity >= 1:
             print("Executing prelude code.", file=sys.stderr)
 
-        for line in args.prelude:
-            exec(line) in locals()
+        exec(os.linesep.join(args.prelude), globals())
 
     fields = []
     if args.regexp:
@@ -98,8 +97,10 @@ def csvCollect(arglist=None):
         fields += list(regexp.groupindex)
     if args.data:
         if args.header:
-            fields += args.header.split(',')
+            fields += args.header
             if len(args.data) != len(fields):
+                if args.verbosity >= 2:
+                    print("Data: " + repr(args.data))
                 raise RuntimeError("Number of column headers must equal number of data items.")
         else:
             fields = list(range(1, len(args.data)+1))
@@ -117,15 +118,18 @@ def csvCollect(arglist=None):
     else:
         infile = open(args.infile, 'rU')
 
-    # Collect comments and open infile.
+    # Read comments at start of infile.
     incomments = ''
     while True:
-        line = infile.readline()
+        line = infile.readline().decode('utf8')
         if line[:1] == '#':
             incomments += line
         else:
             infieldnames = next(unicodecsv.reader([line]))
             break
+
+    if not incomments:
+        incomments = '#' * 80
 
     inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
 
@@ -161,20 +165,22 @@ def csvCollect(arglist=None):
         outfile.write((comments + incomments).encode('utf8'))
 
     # Dynamic code for filter, data and score
-    argbadchars = re.compile(r'[^0-9a-zA-Z_]')
+    def clean(v):
+        return re.sub('\W|^(?=\d)','_', v)
+
     if args.filter:
             exec("\
-def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter, locals())
+def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.filter, globals())
 
     if args.data:
         exec("\
-def evalcolumn(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + '\n'.join(args.data), locals())
+def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + '\n'.join(args.data), globals())
 
     exec("\
-def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join([scoreitem for scoreitem in args.score]) + "]", locals())
+def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return [" + ','.join([scoreitem for scoreitem in args.score]) + "]", globals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -194,7 +200,7 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
                 while True:
                     row = next(inreader)
                     inrowcount += 1
-                    rowargs = {argbadchars.sub('_', key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.iteritems()}
                     keep = True
                     if args.filter:
                         keep = evalfilter(**rowargs) or False
@@ -300,7 +306,7 @@ def evalscore(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in inf
                 result = {}
                 for rowindex in p.range(0, rowcount):
                     row = rows[rowindex]
-                    rowargs = {argbadchars.sub('_', key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.iteritems()}
                     keep = True
                     if args.filter:
                         keep = evalfilter(**rowargs) or False
