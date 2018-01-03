@@ -129,7 +129,7 @@ def csvCollect(arglist=None):
             break
 
     if not incomments:
-        incomments = '#' * 80
+        incomments = '#' * 80 + '\n'
 
     inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
 
