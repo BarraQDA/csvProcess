@@ -49,6 +49,7 @@ def csvCollect(arglist=None):
     parser.add_argument('-c', '--column',     type=str, help='Column to apply regular expression, default is "text"')
     parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create output columns.')
     parser.add_argument('-i', '--ignorecase', action='store_true', help='Ignore case in regular expression')
+    parser.add_argument('-sh', '--score-header', type=str, nargs="*", default=[], help='Names of columns to create for row scores.')
     parser.add_argument('-s', '--score',      type=str, nargs="*", default=['1'], help='Python expression(s) to evaluate row score(s), for example "1 + retweets + favorites"')
     parser.add_argument('-t', '--threshold',  type=float, help='Threshold (first) score for result to be output')
 
@@ -95,6 +96,7 @@ def csvCollect(arglist=None):
     if args.regexp:
         regexp = re.compile(args.regexp, re.UNICODE | (re.IGNORECASE if args.ignorecase else 0))
         fields += list(regexp.groupindex)
+
     if args.data:
         if args.header:
             fields += args.header
@@ -176,11 +178,15 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
     if args.data:
         exec("\
 def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + '\n'.join(args.data), globals())
+    return (" + ','.join(args.data) + ")", globals())
+
+    args.score_header = [args.score_header[scoreidx] or args.score[scoreidx]
+                            if scoreidx < len(args.score_header)
+                            else args.score[scoreidx] for scoreidx in range(len(args.score))]
 
     exec("\
 def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join([scoreitem for scoreitem in args.score]) + "]", globals())
+    return [" + ','.join(args.score) + "]", globals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -375,9 +381,9 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
         for idx in range(len(fields)):
             result[fields[idx]] = result['match'][idx]
         for idx in range(len(args.score)):
-            result[args.score[idx]] = result['score'][idx]
+            result[args.score_header[idx]] = result['score'][idx]
 
-    outunicodecsv=unicodecsv.DictWriter(outfile, fieldnames=fields + args.score,
+    outunicodecsv=unicodecsv.DictWriter(outfile, fieldnames=fields + args.score_header,
                                         extrasaction='ignore', lineterminator=os.linesep)
     if not args.no_header:
         outunicodecsv.writeheader()
