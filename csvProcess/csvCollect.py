@@ -49,7 +49,7 @@ def csvCollect(arglist=None):
     parser.add_argument('-c', '--column',     type=str, help='Column to apply regular expression, default is "text"')
     parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create output columns.')
     parser.add_argument('-i', '--ignorecase', action='store_true', help='Ignore case in regular expression')
-    parser.add_argument('-sh', '--score-header', type=str, nargs="*", default=[], help='Names of columns to create for row scores.')
+    parser.add_argument('-sh', '--score-header', type=str, nargs="*", help='Names of columns to create for row scores.')
     parser.add_argument('-s', '--score',      type=str, nargs="*", default=['1'], help='Python expression(s) to evaluate row score(s), for example "1 + retweets + favorites"')
     parser.add_argument('-t', '--threshold',  type=float, help='Threshold (first) score for result to be output')
 
@@ -179,6 +179,12 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
         exec("\
 def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return (" + ','.join(args.data) + ")", globals())
+
+    if args.score_header is None:
+        if args.score == ['1']:
+            args.score_header = ['frequency']
+        else:
+            args.score_header = []
 
     args.score_header = [args.score_header[scoreidx] or args.score[scoreidx]
                             if scoreidx < len(args.score_header)
