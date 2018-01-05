@@ -124,15 +124,17 @@ def csvReplay(input_file, force, dry_run, edit,
 
         curdepth = 0
         replaystack = []
-        commentline = comments.pop(0)
-        filematch = fileregexp.match(commentline)
-        while filematch and len(comments) > 0:
+        filematch = False
+        while len(comments) and not filematch:
+            commentline = comments.pop(0)
+            filematch = fileregexp.match(commentline)
+        while filematch and len(comments):
             filename  = filematch.group('file')
             pipestack = []
             infilelist = []
             outfile = None
             pipematch = True
-            while pipematch and len(comments) > 0:
+            while pipematch and len(comments):
                 commentline = comments.pop(0)
                 cmdmatch = cmdregexp.match(commentline)
                 if cmdmatch:
@@ -142,7 +144,7 @@ def csvReplay(input_file, force, dry_run, edit,
 
                 arglist = []
                 lastargname = ''
-                commentline = comments.pop(0) if len(comments) > 0 else None
+                commentline = comments.pop(0) if len(comments) else None
                 argmatch = argregexp.match(commentline) if commentline else None
                 while argmatch:
                     argname  = argmatch.group('name')
@@ -164,7 +166,7 @@ def csvReplay(input_file, force, dry_run, edit,
                             if argvalue is not None:
                                 arglist.append(argvalue)
 
-                    commentline = comments.pop(0) if len(comments) > 0 else None
+                    commentline = comments.pop(0) if len(comments) else None
                     argmatch = argregexp.match(commentline) if commentline else None
 
                 pipestack.append((cmd, arglist + extraargs + ['--verbosity', str(verbosity)]))
@@ -198,7 +200,7 @@ def csvReplay(input_file, force, dry_run, edit,
 
             if execute:
                 process = None
-                while len(pipestack) > 0:
+                while len(pipestack):
                     (cmd, arglist) = pipestack.pop()
                     if infilelist:
                         arglist = infilelist + arglist
