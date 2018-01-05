@@ -96,7 +96,7 @@ def build_comments(kwargs):
 def csvReplay(input_file, force, dry_run, edit,
               verbosity, depth, remove,
               extraargs=[], **dummy):
-    fileregexp = re.compile(r"^#+ (?P<file>.+) #+$", re.UNICODE)
+    fileregexp = re.compile(r"^#+(?:\s+(?P<file>.+)\s+)?#+$", re.UNICODE)
     cmdregexp  = re.compile(r"^#\s+(?P<cmd>[\w\.-]+)", re.UNICODE)
     argregexp  = re.compile(r"^#\s+(?:--)?(?P<name>[\w-]+)(?:=(?P<quote>\"?)(?P<value>.+)(?P=quote))?", re.UNICODE)
     piperegexp = re.compile(r"^#+$", re.UNICODE)
@@ -126,7 +126,7 @@ def csvReplay(input_file, force, dry_run, edit,
         replaystack = []
         commentline = comments.pop(0)
         filematch = fileregexp.match(commentline)
-        while filematch:
+        while filematch and len(comments) > 0:
             filename  = filematch.group('file')
             pipestack = []
             infilelist = []
@@ -170,8 +170,7 @@ def csvReplay(input_file, force, dry_run, edit,
                 pipestack.append((cmd, arglist + extraargs + ['--verbosity', str(verbosity)]))
                 pipematch = piperegexp.match(commentline) if commentline else None
 
-            if outfile:
-                replaystack.append((pipestack, infilelist, outfile))
+            replaystack.append((pipestack, infilelist, outfile))
 
             curdepth += 1
             if depth and curdepth == depth:
@@ -204,7 +203,7 @@ def csvReplay(input_file, force, dry_run, edit,
                     if infilelist:
                         arglist = infilelist + arglist
                     infilelist = None
-                    if len(pipestack) == 0 and '--outfile' not in arglist:
+                    if len(pipestack) == 0 and '--outfile' not in arglist and outfilename:
                         arglist = arglist + ['--outfile', outfilename]
 
                     if edit:
@@ -217,6 +216,7 @@ def csvReplay(input_file, force, dry_run, edit,
                         if not process:
                             process = subprocess.Popen([cmd] + arglist,
                                                        stdout=subprocess.PIPE if len(pipestack) else sys.stdout,
+                                                       stdin=sys.stdin,
                                                        stderr=sys.stderr)
                         else:
                             process = subprocess.Popen([cmd] + arglist,
