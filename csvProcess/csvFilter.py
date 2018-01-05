@@ -49,7 +49,7 @@ def csvFilter(arglist=None):
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
     parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
-    parser.add_argument('-x', '--exclude',    type=str, help='If specified, copy all columns from input file except those in this comma-separated list')
+    parser.add_argument('-x', '--exclude',    type=str, nargs="*", help='Columns to exclude from copy')
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
     parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
 
@@ -164,7 +164,7 @@ def csvFilter(arglist=None):
 
     outfieldnames = []
     if args.exclude:
-        outfieldnames += [fieldname for fieldname in infieldnames if fieldname not in args.exclude.split(',')]
+        outfieldnames += [fieldname for fieldname in infieldnames if fieldname not in args.exclude]
     elif args.copy:
         outfieldnames += infieldnames
     if args.header:
