@@ -27,6 +27,7 @@ import re
 from dateutil import parser as dateparser
 import pymp
 from wordcloud import WordCloud
+import subprocess
 
 def csvCloud(arglist):
     parser = argparse.ArgumentParser(description='Twitter feed word cloud.',
@@ -55,7 +56,8 @@ def csvCloud(arglist):
     parser.add_argument('--height',        type=int, default=800)
     parser.add_argument('-o', '--outfile', type=str, help='Output image file, otherwise display on screen.')
 
-    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, if missing use stdin.')
+    parser.add_argument('-P', '--pipe',       type=str, default='text', help='Command to pipe input from')
+    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
 
     parser.add_argument('--no-comments',     action='store_true',
                                                     help='Do not produce a comments logfile')
@@ -82,10 +84,12 @@ def csvCloud(arglist):
     until = dateparser.parse(args.until) if args.until else None
     since = dateparser.parse(args.since) if args.since else None
 
-    if args.infile is None:
-        infile = sys.stdin
-    else:
+    if args.infile:
         infile = open(args.infile, 'rU')
+    elif args.pipe:
+        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True).stdout
+    else:
+        infile = sys.stdin
 
     # Skip comments at start of infile.
     incomments = ''

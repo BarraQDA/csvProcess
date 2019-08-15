@@ -27,6 +27,7 @@ import multiprocessing
 import pymp
 import re
 from dateutil import parser as dateparser
+import subprocess
 
 def csvFilter(arglist=None):
 
@@ -59,7 +60,8 @@ def csvFilter(arglist=None):
     parser.add_argument('--no-comments',      action='store_true', help='Do not output descriptive comments')
     parser.add_argument('--no-header',        action='store_true', help='Do not output CSV header with column names')
 
-    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, otherwise use stdin.')
+    parser.add_argument('-P', '--pipe',       type=str, default='text', help='Command to pipe input from')
+    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
 
     args = parser.parse_args(arglist)
     hiddenargs = ['verbosity', 'jobs', 'batch', 'no_comments']
@@ -88,10 +90,12 @@ def csvFilter(arglist=None):
     until = dateparser.parse(args.until) if args.until else None
     since = dateparser.parse(args.since) if args.since else None
 
-    if args.infile is None:
-        infile = sys.stdin
-    else:
+    if args.infile:
         infile = open(args.infile, 'rU')
+    elif args.pipe:
+        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True).stdout
+    else:
+        infile = sys.stdin
 
     # Read comments at start of infile.
     incomments = ''
