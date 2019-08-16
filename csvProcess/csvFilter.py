@@ -27,7 +27,9 @@ import multiprocessing
 import pymp
 import re
 from dateutil import parser as dateparser
+import calendar
 import subprocess
+from decimal import *
 
 def csvFilter(arglist=None):
 
@@ -47,6 +49,7 @@ def csvFilter(arglist=None):
 
     parser.add_argument(      '--since',      type=str, help='Lower bound date/time in any sensible format')
     parser.add_argument(      '--until',      type=str, help='Upper bound date/time in any sensible format')
+    parser.add_argument(      '--datecol',    type=str, help='Column containing date/time date', default='date')
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
     parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
@@ -60,8 +63,8 @@ def csvFilter(arglist=None):
     parser.add_argument('--no-comments',      action='store_true', help='Do not output descriptive comments')
     parser.add_argument('--no-header',        action='store_true', help='Do not output CSV header with column names')
 
-    parser.add_argument('-P', '--pipe',       type=str, default='text', help='Command to pipe input from')
-    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
+    parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
+    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
 
     args = parser.parse_args(arglist)
     hiddenargs = ['verbosity', 'jobs', 'batch', 'no_comments']
@@ -135,19 +138,20 @@ def csvFilter(arglist=None):
         for arg in arglist:
             if arg not in hiddenargs:
                 val = getattr(args, arg)
+                argstr = arg.replace('_', '-')
                 if type(val) == str or type(val) == unicode:
-                    comments += '#     --' + arg + '="' + val + '"\n'
+                    comments += '#     --' + argstr + '="' + val + '"\n'
                 elif type(val) == bool:
                     if val:
-                        comments += '#     --' + arg + '\n'
+                        comments += '#     --' + argstr + '\n'
                 elif type(val) == list:
                     for valitem in val:
                         if type(valitem) == str:
-                            comments += '#     --' + arg + '="' + valitem + '"\n'
+                            comments += '#     --' + argstr + '="' + valitem + '"\n'
                         else:
-                            comments += '#     --' + arg + '=' + str(valitem) + '\n'
+                            comments += '#     --' + argstr + '=' + str(valitem) + '\n'
                 elif val is not None:
-                    comments += '#     --' + arg + '=' + str(val) + '\n'
+                    comments += '#     --' + argstr + '=' + str(val) + '\n'
 
         if args.outfile:
             outcomments = (' ' + args.outfile + ' ').center(80, '#') + '\n'
@@ -162,19 +166,23 @@ def csvFilter(arglist=None):
             rejcomments += comments + incomments
             rejfile.write(rejcomments.encode('utf8'))
 
-    # If no columns specified, assume we mean copy columns from infile
-    if not(args.exclude or bool(args.header) or bool(regexpfields)):
-        args.copy = True
+    if args.copy:
+        if args.exclude:
+            outfieldnames = [fieldname for fieldname in infieldnames if fieldname not in args.exclude]
+        else:
+            outfieldnames = list(infieldnames)
+    else:
+        outfieldnames = []
+    if args.data:
+        if args.header:
+            datafieldnames = [fieldname for fieldname in args.header]
+        elif args.data:
+            datafieldnames = [fieldname for fieldname in args.data]
 
-    outfieldnames = []
-    if args.exclude:
-        outfieldnames += [fieldname for fieldname in infieldnames if fieldname not in args.exclude]
-    elif args.copy:
-        outfieldnames += infieldnames
-    if args.header:
-        outfieldnames += [fieldname for fieldname in args.header if fieldname not in outfieldnames]
+        outfieldnames += datafieldnames
+
     if regexpfields:
-        outfieldnames += [fieldname for fieldname in regexpfields if fieldname not in outfieldnames]
+        outfieldnames += [fieldname for fieldname in regexpfields]
 
     outcsv=unicodecsv.DictWriter(outfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
 
@@ -192,11 +200,19 @@ def csvFilter(arglist=None):
         exec("\
 def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return " + args.filter, globals())
+        if args.verbosity >= 2:
+            print("\
+def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.filter)
 
     if args.data:
         exec("\
 def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return [" + ','.join(args.data) + "]", globals())
+        if args.verbosity >= 2:
+            print("\
+def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return [" + ','.join(args.data) + "]")
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -214,12 +230,14 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
             rowargs = {clean(key): value for key, value in row.iteritems()}
             keep = True
             if args.filter:
+                if args.verbosity >= 2:
+                    print("evalfilter(" + repr(rowargs) + ")", file=sys.stderr)
                 keep = evalfilter(**rowargs) or False
             if keep and args.regexp:
                 regexpmatch = regexp.match(row[args.column])
                 keep = regexpmatch or False
             if keep and (since or until):
-                date = row.get('date')
+                date = row.get(args.datecol)
                 if date:
                     date = dateparser.parse(date)
                     if until and date >= until:
@@ -234,9 +252,11 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
             if args.regexp and regexpmatch:
                 outrow.update({regexpfield: regexpmatch.group(regexpfield) for regexpfield in regexpfields})
             if args.data:
+                if args.verbosity >= 2:
+                    print("evaldata(" + repr(rowargs) + ")", file=sys.stderr)
                 rowdata = evaldata(**rowargs)
                 idx = 0
-                for col in args.header:
+                for col in datafieldnames:
                     outrow[col] = rowdata[idx]
                     idx += 1
 
@@ -294,12 +314,14 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                     rowargs = {clean(key): value for key, value in row.iteritems()}
                     keep = True
                     if args.filter:
+                        if args.verbosity >= 2:
+                            print("evalfilter(" + repr(rowargs) + ")", file=sys.stderr)
                         keep = evalfilter(**rowargs) or False
                     if keep and args.regexp:
                         regexpmatch = regexp.match(row[args.column])
                         keep = regexpmatch or False
                     if keep and (since or until):
-                        date = row.get('date')
+                        date = row.get(args.datecol)
                         if date:
                             date = dateparser.parse(date)
                             if until and date >= until:
@@ -314,9 +336,11 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                     if args.regexp and regexpmatch:
                         outrow.update({regexpfield: regexpmatch.group(regexpfield) for regexpfield in regexpfields})
                     if args.data:
+                        if args.verbosity >= 2:
+                            print("evaldata(" + repr(rowargs) + ")", file=sys.stderr)
                         rowdata = evaldata(**rowargs)
                         idx = 0
-                        for col in args.header:
+                        for col in datafieldnames:
                             outrow[col] = rowdata[idx]
                             idx += 1
 

@@ -41,6 +41,7 @@ def csvCloud(arglist):
     parser.add_argument('-f', '--filter',    type=str, help='Python expression evaluated to determine whether tweet is included')
     parser.add_argument(      '--since',     type=str, help='Lower bound date/time in any sensible format')
     parser.add_argument(      '--until',     type=str, help='Upper bound date/time in any sensible format')
+    parser.add_argument(      '--datecol',   type=str, help='Column containing date/time date', default='date')
     parser.add_argument('-l', '--limit',     type=int, help='Limit number of tweets to process')
 
     parser.add_argument('-c', '--column',    type=str, default='text', help='Text column')
@@ -56,8 +57,8 @@ def csvCloud(arglist):
     parser.add_argument('--height',        type=int, default=800)
     parser.add_argument('-o', '--outfile', type=str, help='Output image file, otherwise display on screen.')
 
-    parser.add_argument('-P', '--pipe',       type=str, default='text', help='Command to pipe input from')
-    parser.add_argument('infile', type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
+    parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
+    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
 
     parser.add_argument('--no-comments',     action='store_true',
                                                     help='Do not produce a comments logfile')
@@ -108,19 +109,20 @@ def csvCloud(arglist):
         for arg in arglist:
             if arg not in hiddenargs:
                 val = getattr(args, arg)
+                argstr = arg.replace('_', '-')
                 if type(val) == str or type(val) == unicode:
-                    comments += '#     --' + arg + '="' + val + '"\n'
+                    comments += '#     --' + argstr + '="' + val + '"\n'
                 elif type(val) == bool:
                     if val:
-                        comments += '#     --' + arg + '\n'
+                        comments += '#     --' + argstr + '\n'
                 elif type(val) == list:
                     for valitem in val:
                         if type(valitem) == str:
-                            comments += '#     --' + arg + '="' + valitem + '"\n'
+                            comments += '#     --' + argstr + '="' + valitem + '"\n'
                         else:
-                            comments += '#     --' + arg + '=' + str(valitem) + '\n'
+                            comments += '#     --' + argstr + '=' + str(valitem) + '\n'
                 elif val is not None:
-                    comments += '#     --' + arg + '=' + str(val) + '\n'
+                    comments += '#     --' + argstr + '=' + str(val) + '\n'
 
         logfilename = args.outfile.rsplit('.',1)[0] + '.log'
         logfile = codecs.open(logfilename, 'w', 'utf-8')
@@ -168,7 +170,7 @@ def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in tw
             if args.filter:
                 keep = evalfilter(**rowargs) or False
             if keep and (since or until):
-                date = row.get('date')
+                date = row.get(args.datecol)
                 if date:
                     date = dateparser.parse(date)
                     if until and date >= until:
@@ -249,7 +251,7 @@ def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in tw
                     if args.filter:
                         keep = evalfilter(**rowargs) or False
                     if keep and (since or until):
-                        date = row.get('date')
+                        date = row.get(args.datecol)
                         if date:
                             date = dateparser.parse(date)
                             if until and date >= until:

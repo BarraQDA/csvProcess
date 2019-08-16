@@ -157,7 +157,8 @@ def csvReplay(input_file, force, dry_run, edit,
                         if argname == 'outfile':
                             if argvalue != '<stdout>':
                                 outfile = argvalue
-                                assert (outfile == filename)
+                                if filename and filename != outfile:
+                                    print("WARNING: Argument outfile: " + outfile + " differs from comment filename: " + filename, file=sys.stderr)
                         else:
                             if argname != lastargname:
                                 arglist.append('--' + argname)
