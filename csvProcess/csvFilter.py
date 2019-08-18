@@ -27,6 +27,7 @@ import multiprocessing
 import pymp
 import re
 from dateutil import parser as dateparser
+import datetime
 import calendar
 import subprocess
 from decimal import *
@@ -55,7 +56,7 @@ def csvFilter(arglist=None):
     parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
     parser.add_argument('-x', '--exclude',    type=str, nargs="*", help='Columns to exclude from copy')
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
-    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
+    parser.add_argument('-d', '--data',       type=str,            help='Python code to produce list of values to output as columns.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
     parser.add_argument(      '--rejfile',    type=str, help='Output CSV file for rejected rows')
@@ -81,6 +82,8 @@ def csvFilter(arglist=None):
     if args.prelude:
         if args.verbosity >= 1:
             print("Executing prelude code.", file=sys.stderr)
+        if args.verbosity >= 2:
+            print(os.linesep.join(args.prelude), file=sys.stderr)
 
         exec(os.linesep.join(args.prelude), globals())
 
@@ -176,13 +179,11 @@ def csvFilter(arglist=None):
     if args.data:
         if args.header:
             datafieldnames = [fieldname for fieldname in args.header]
-        elif args.data:
-            datafieldnames = [fieldname for fieldname in args.data]
 
-        outfieldnames += datafieldnames
+        outfieldnames += [fieldname for fieldname in datafieldnames if fieldname not in outfieldnames]
 
     if regexpfields:
-        outfieldnames += [fieldname for fieldname in regexpfields]
+        outfieldnames += [fieldname for fieldname in regexpfields if fieldname not in outfieldnames]
 
     outcsv=unicodecsv.DictWriter(outfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
 
@@ -197,22 +198,34 @@ def csvFilter(arglist=None):
         return re.sub('\W|^(?=\d)','_', v)
 
     if args.filter:
-        exec("\
-def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter, globals())
         if args.verbosity >= 2:
             print("\
 def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return " + args.filter)
+        exec("\
+def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.filter, globals())
 
     if args.data:
-        exec("\
-def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join(args.data) + "]", globals())
         if args.verbosity >= 2:
             print("\
 def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join(args.data) + "]")
+    return " + args.data)
+        exec("\
+def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.data, globals())
+
+    def loadrowdata(outrow, rowdata):
+        if type(rowdata) == dict:
+            for key, value in rowdata.iteritems():
+                outrow[key] = rowdata[key]
+        elif type(rowdata) == tuple:
+            for idx, value in enumerate(rowdata):
+                key = datafieldnames[idx] if idx < len(datafieldnames) else str(idx)
+                outrow[key] = str(value)
+        elif rowdata is not None:
+            key = datafieldnames[0] if 0 < len(datafieldnames) else '0'
+            outrow[key] = str(rowdata)
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -233,6 +246,8 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 if args.verbosity >= 2:
                     print("evalfilter(" + repr(rowargs) + ")", file=sys.stderr)
                 keep = evalfilter(**rowargs) or False
+                if args.verbosity >= 2:
+                    print("    --> " + repr(keep), file=sys.stderr)
             if keep and args.regexp:
                 regexpmatch = regexp.match(row[args.column])
                 keep = regexpmatch or False
@@ -255,19 +270,26 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 if args.verbosity >= 2:
                     print("evaldata(" + repr(rowargs) + ")", file=sys.stderr)
                 rowdata = evaldata(**rowargs)
-                idx = 0
-                for col in datafieldnames:
-                    outrow[col] = rowdata[idx]
-                    idx += 1
+                if args.verbosity >= 2:
+                    print("    --> " + repr(rowdata), file=sys.stderr)
+
+                if type(rowdata) != list:
+                    rowdata = [rowdata]
+            else:
+                rowdata = [None]
 
             if keep != args.invert:
-                outcsv.writerow(outrow)
-                outrowcount += 1
-                if args.number and outrowcount == args.number:
-                    break
+                for rowdataitem in rowdata:
+                    loadrowdata(outrow, rowdataitem)
+                    outcsv.writerow(outrow)
+                    outrowcount += 1
+                    if args.number and outrowcount == args.number:
+                        break
             else:
-                rejcsv.writerow(outrow)
-                rejrowcount += 1
+                for rowdataitem in rowdata:
+                    loadrowdata(outrow, rowdataitem)
+                    rejcsv.writerow(outrow)
+                    rejrowcount += 1
 
             if args.number and outrowcount == args.number:
                 break
@@ -317,6 +339,8 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                         if args.verbosity >= 2:
                             print("evalfilter(" + repr(rowargs) + ")", file=sys.stderr)
                         keep = evalfilter(**rowargs) or False
+                        if args.verbosity >= 2:
+                            print("    --> " + repr(keep), file=sys.stderr)
                     if keep and args.regexp:
                         regexpmatch = regexp.match(row[args.column])
                         keep = regexpmatch or False
@@ -339,10 +363,15 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                         if args.verbosity >= 2:
                             print("evaldata(" + repr(rowargs) + ")", file=sys.stderr)
                         rowdata = evaldata(**rowargs)
-                        idx = 0
-                        for col in datafieldnames:
-                            outrow[col] = rowdata[idx]
-                            idx += 1
+                        if args.verbosity >= 2:
+                            print("    --> " + repr(rowdata), file=sys.stderr)
+                        if type(rowdata) == list:
+                            outrow['_rowdata'] = list(rowdata)
+                        else:
+                            loadrowdata(outrow, rowdata)
+                            outrow['_rowdata'] = [None]
+                    else:
+                        outrow['_rowdata'] = [None]
 
                     if keep != args.invert:
                         result[row['_Id']] = outrow
@@ -374,10 +403,14 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
 
             endindex = None
             for index in sorted(mergedresult.keys()):
-                outcsv.writerow(mergedresult[index])
-                outrowcount += 1
-                if args.number and outrowcount == args.number:
-                    break
+                outrow = mergedresult[index]
+                rowdata = outrow.get('_rowdata')
+                for rowdataitem in rowdata:
+                    loadrowdata(outrow, rowdataitem)
+                    outcsv.writerow(mergedresult[index])
+                    outrowcount += 1
+                    if args.number and outrowcount == args.number:
+                        break
 
                 if args.number and outrowcount == args.number:
                     endindex = index
@@ -387,8 +420,11 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 for index in sorted(mergedreject.keys()):
                     if index < endindex:
                         break
-
-                    rejcsv.writerow(mergedreject[index])
+                    outrow = mergedreject[index]
+                    rowdata = outrow.get('_rowdata')
+                    for rowdataitem in rowdata:
+                        loadrowdata(outrow, rowdataitem)
+                        rejcsv.writerow(mergedresult[index])
 
             if args.number and outrowcount == args.number:
                 break
