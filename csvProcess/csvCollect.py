@@ -60,7 +60,7 @@ def csvCollect(arglist=None):
     parser.add_argument('-in', '--interval',  type=str, help='Interval for measuring frequency, for example "1 day".')
 
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
-    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce list of values to output as columns.')
+    parser.add_argument('-I', '--indexes',    type=str, nargs="*", help='Python code to produce list of values to output as columns.')
     parser.add_argument('-S', '--sort',       type=str, nargs="?", help='Python expression used to sort rows.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
@@ -74,8 +74,8 @@ def csvCollect(arglist=None):
     args = parser.parse_args(arglist)
     hiddenargs = ['verbosity', 'jobs', 'batch', 'preset', 'no_comments']
 
-    if (args.regexp is None) == (args.data is None):
-        raise RuntimeError("Exactly one of 'data' and 'regexp' must be specified.")
+    if (args.regexp is None) == (args.indexes is None):
+        raise RuntimeError("Exactly one of 'indexes' and 'regexp' must be specified.")
 
     if args.regexp and not args.column:
         raise RuntimeError("'column' must be specified for regexp.")
@@ -95,6 +95,8 @@ def csvCollect(arglist=None):
     if args.prelude:
         if args.verbosity >= 1:
             print("Executing prelude code.", file=sys.stderr)
+        if args.verbosity >= 2:
+            print(os.linesep.join(args.prelude), file=sys.stderr)
 
         exec(os.linesep.join(args.prelude), globals())
 
@@ -103,15 +105,15 @@ def csvCollect(arglist=None):
         regexp = re.compile(args.regexp, re.UNICODE | (re.IGNORECASE if args.ignorecase else 0))
         fields += list(regexp.groupindex)
 
-    if args.data:
+    if args.indexes:
         if args.header:
             fields += args.header
-            if len(args.data) != len(fields):
+            if len(args.indexes) != len(fields):
                 if args.verbosity >= 2:
-                    print("Data: " + repr(args.data))
+                    print("Data: " + repr(args.indexes))
                 raise RuntimeError("Number of column headers must equal number of data items.")
         else:
-            fields = list(range(1, len(args.data)+1))
+            fields = list(range(1, len(args.indexes)+1))
 
     until = dateparser.parse(args.until) if args.until else None
     since = dateparser.parse(args.since) if args.since else None
@@ -182,22 +184,22 @@ def csvCollect(arglist=None):
         return re.sub('\W|^(?=\d)','_', str(v))
 
     if args.filter:
-        exec("\
-def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter, globals())
         if args.verbosity >= 2:
             print("\
 def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return " + args.filter, file=sys.stderr)
-
-    if args.data:
         exec("\
-def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (" + ','.join(args.data) + ")", globals())
+def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return " + args.filter, globals())
+
+    if args.indexes:
         if args.verbosity >= 2:
             print("\
-def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (" + ','.join(args.data) + ")", file=sys.stderr)
+def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return (" + ','.join(args.indexes) + ")", file=sys.stderr)
+        exec("\
+def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return (" + ','.join(args.indexes) + ")", globals())
 
     if args.score_header is None:
         if args.score == ['1']:
@@ -210,25 +212,25 @@ def evalcolumn(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
                             else args.score[scoreidx] for scoreidx in range(len(args.score))]
 
     if args.sort:
-        exec("\
-def evalsort(" + ','.join([clean(fieldname) for fieldname in fields+args.score_header]) + ",**kwargs):\n\
-    return (" + args.sort + ")", globals())
         if args.verbosity >= 2:
             print("\
 def evalsort(" + ','.join([clean(fieldname) for fieldname in fields+args.score_header]) + ",**kwargs):\n\
     return (" + args.sort + ")", file=sys.stderr)
+        exec("\
+def evalsort(" + ','.join([clean(fieldname) for fieldname in fields+args.score_header]) + ",**kwargs):\n\
+    return (" + args.sort + ")", globals())
 
         def sortkey(row):
             rowargs = {clean(key): value for key, value in row.iteritems()}
             return evalsort(**rowargs)
 
-    exec("\
-def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return [" + ','.join(args.score) + "]", globals())
     if args.verbosity >= 2:
         print("\
 def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return [" + ','.join(args.score) + "]", file=sys.stderr)
+    exec("\
+def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
+    return [" + ','.join(args.score) + "]", globals())
 
     if args.verbosity >= 1:
         print("Loading CSV data.", file=sys.stderr)
@@ -288,9 +290,6 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
             indexes = []
             if args.regexp:
                 matches = regexp.finditer(row[args.column])
-                if args.verbosity >= 1:
-                    if type(matches) <> list:
-                        print("WARNING: evalcolumn should return a list, your data argument is probably incorrect!", file=sys.stderr)
 
                 for match in matches:
                     if not rowscore:
@@ -315,15 +314,15 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                     else:
                         mergedresult[index] = map(add, mergedresult.get(index, [0] * len(args.score)), rowscore)
 
-            if args.data:
+            if args.indexes:
                 if args.verbosity >= 2:
-                    print("evalcolumn(" + repr(rowargs) + ")", file=sys.stderr)
-                matches = evalcolumn(**rowargs)
+                    print("evalindexes(" + repr(rowargs) + ")", file=sys.stderr)
+                matches = evalindexes(**rowargs)
                 if args.verbosity >= 2:
                     print("    --> " + repr(matches), file=sys.stderr)
                 if args.verbosity >= 1:
                     if type(matches) <> list:
-                        print("WARNING: evalcolumn should return a list, your data argument is probably incorrect!", file=sys.stderr)
+                        print("WARNING: evalindexes should return a list, your 'indexes' argument is probably incorrect!", file=sys.stderr)
 
                 for match in matches:
                     if not rowscore:
@@ -345,7 +344,6 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                         runningresult[index] = map(add, runningresult.get(index, [0] * len(args.score)), rowscore)
                         curmergedresult = mergedresult.get(index, [0] * len(args.score))
                         mergedresult[index] = [max(curmergedresult[idx], runningresult[index][idx]) for idx in range(len(args.score))]
-                        #print(index, mergedresult[index])
                     else:
                         mergedresult[index] = map(add, mergedresult.get(index, [0] * len(args.score)), rowscore)
 
@@ -406,9 +404,6 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                     rowscore = None
                     if args.regexp:
                         matches = regexp.finditer(row[args.column])
-                        if args.verbosity >= 1:
-                            if type(matches) <> list:
-                                print("WARNING: evalcolumn should return a list, your data argument is probably incorrect!", file=sys.stderr)
                         rowscore = None
                         for match in matches:
                             if not rowscore:
@@ -425,15 +420,15 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
 
                             result[index] = map(add, result.get(index, [0] * len(args.score)), rowscore)
 
-                    if args.data:
+                    if args.indexes:
                         if args.verbosity >= 2:
-                            print("evalcolumn(" + repr(rowargs) + ")", file=sys.stderr)
-                        matches = evalcolumn(**rowargs)
+                            print("evalindexes(" + repr(rowargs) + ")", file=sys.stderr)
+                        matches = evalindexes(**rowargs)
                         if args.verbosity >= 2:
                             print("    --> " + repr(matches), file=sys.stderr)
                         if args.verbosity >= 1:
                             if type(matches) <> list:
-                                print("WARNING: evalcolumn should return a list, your data argument is probably incorrect!", file=sys.stderr)
+                                print("WARNING: evalindexes should return a list, your 'indexes' argument is probably incorrect!", file=sys.stderr)
 
                         for match in matches:
                             if not rowscore:
