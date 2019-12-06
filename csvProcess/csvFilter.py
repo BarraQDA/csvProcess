@@ -31,6 +31,7 @@ import datetime
 import calendar
 import subprocess
 from decimal import *
+import itertools
 
 def csvFilter(arglist=None):
 
@@ -56,7 +57,7 @@ def csvFilter(arglist=None):
     parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
     parser.add_argument('-x', '--exclude',    type=str, nargs="*", help='Columns to exclude from copy')
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
-    parser.add_argument('-d', '--data',       type=str,            help='Python code to produce list of values to output as columns.')
+    parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce lists of values to output as columns.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
     parser.add_argument(      '--rejfile',    type=str, help='Output CSV file for rejected rows')
@@ -67,6 +68,7 @@ def csvFilter(arglist=None):
     parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
     parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
 
+    global args, hiddenargs
     args = parser.parse_args(arglist)
     hiddenargs = ['verbosity', 'jobs', 'batch', 'no_comments']
 
@@ -178,6 +180,9 @@ def csvFilter(arglist=None):
         outfieldnames = []
     if args.data:
         if args.header:
+            #if len(args.header) != len(args.data):
+                #raise RuntimeError("Number of headers must equal number of data items.")
+
             datafieldnames = [fieldname for fieldname in args.header]
 
         outfieldnames += [fieldname for fieldname in datafieldnames if fieldname not in outfieldnames]
@@ -201,19 +206,24 @@ def csvFilter(arglist=None):
         if args.verbosity >= 2:
             print("\
 def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.filter)
+    return " + args.filter, file=sys.stderr)
         exec("\
 def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
     return " + args.filter, globals())
 
     if args.data:
+        evaldatacode = "\
+def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n"
+        if len(args.data) > 1:
+            evaldatacode += "\
+    return (list(itertools.izip_longest(*[" + ','.join(args.data) + "])))"
+        else:
+            evaldatacode += "\
+    return (" + args.data[0] + ")"
+
         if args.verbosity >= 2:
-            print("\
-def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.data)
-        exec("\
-def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return " + args.data, globals())
+            print(evaldatacode, file=sys.stderr)
+        exec(evaldatacode, globals())
 
     def loadrowdata(outrow, rowdata):
         if type(rowdata) == dict:

@@ -75,6 +75,8 @@ def parse_arguments_no_gooey():
                              help='Print but do not execute command')
     replaygroup.add_argument(      '--edit', action='store_true',
                              help='Open a Gooey window to allow editing before running command')
+    replaygroup.add_argument(      '--substitute', nargs='*', type=str,
+                             help='List of variable:value for substitution')
 
     advancedgroup = parser.add_argument_group('Advanced')
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
@@ -88,6 +90,7 @@ def parse_arguments_no_gooey():
 
     args, extraargs = parser.parse_known_args()
     args.extraargs = extraargs
+    args.substitute = { sub.split(':')[0]: sub.split(':')[1] for sub in args.substitute } if args.substitute else {}
     return vars(args)
 
 def build_comments(kwargs):
@@ -95,11 +98,12 @@ def build_comments(kwargs):
 
 def csvReplay(input_file, force, dry_run, edit,
               verbosity, depth, remove,
-              extraargs=[], **dummy):
+              extraargs=[], substitute={}, **dummy):
     fileregexp = re.compile(r"^#+(?:\s+(?P<file>.+)\s+)?#+$", re.UNICODE)
     cmdregexp  = re.compile(r"^#\s+(?P<cmd>[\w\.-]+)", re.UNICODE)
     argregexp  = re.compile(r"^#\s+(?:--)?(?P<name>[\w-]+)(?:=(?P<quote>\"?)(?P<value>.+)(?P=quote))?", re.UNICODE)
     piperegexp = re.compile(r"^#+$", re.UNICODE)
+    argvalexp  = re.compile(r"(\$\{?(\w+)\}?)", re.UNICODE)
 
     if not isinstance(input_file, list):    # Gooey can't handle input_file as list
         input_file = [input_file]
@@ -149,6 +153,16 @@ def csvReplay(input_file, force, dry_run, edit,
                 while argmatch:
                     argname  = argmatch.group('name')
                     argvalue = argmatch.group('value')
+
+                    if argvalue:
+                        argvalsubs = argvalexp.findall(argvalue)
+                        for argvalsub in argvalsubs:
+                            subname = argvalsub[1]
+                            subval = substitute.get(subname)
+                            if subval is None:
+                                raise RuntimeError("Mising substitution: " + subname)
+
+                            argvalue = argvalue.replace(argvalsub[0], subval)
 
                     if argname == 'infile':
                         if argvalue != '<stdin>':
@@ -228,6 +242,8 @@ def csvReplay(input_file, force, dry_run, edit,
                                                        stderr=sys.stderr)
                 if not dry_run:
                     process.wait()
+                    if process.returncode:
+                        raise RuntimeError("Error running script.")
             else:
                 if verbosity >= 2:
                     print("File not replayed: " + outfilename, file=sys.stderr)

@@ -33,6 +33,7 @@ from operator import sub, add
 import subprocess
 import datetime
 from decimal import *
+import itertools
 
 def csvCollect(arglist=None):
 
@@ -50,17 +51,18 @@ def csvCollect(arglist=None):
     parser.add_argument(      '--datecol',    type=str, help='Column containing date/time date', default='date')
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
+    parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create values to collect.')
     parser.add_argument('-c', '--column',     type=str, help='Column to apply regular expression, default is "text"')
-    parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create output columns.')
     parser.add_argument('-i', '--ignorecase', action='store_true', help='Ignore case in regular expression')
+    parser.add_argument('-I', '--indexes',    type=str, nargs="*", help='Python code to produce lists of values to collect.')
+    parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column name for regexp or indexes result.')
+
     parser.add_argument('-sh', '--score-header', type=str, nargs="*", help='Names of columns to create for row scores.')
     parser.add_argument('-s', '--score',      type=str, nargs="*", default=['1'], help='Python expression(s) to evaluate row score(s), for example "1 + retweets + favorites"')
     parser.add_argument('-t', '--threshold',  type=float, help='Threshold (first) score for result to be output')
 
     parser.add_argument('-in', '--interval',  type=str, help='Interval for measuring frequency, for example "1 day".')
 
-    parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
-    parser.add_argument('-I', '--indexes',    type=str, nargs="*", help='Python code to produce list of values to output as columns.')
     parser.add_argument('-S', '--sort',       type=str, nargs="?", help='Python expression used to sort rows.')
 
     parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
@@ -109,8 +111,6 @@ def csvCollect(arglist=None):
         if args.header:
             fields += args.header
             if len(args.indexes) != len(fields):
-                if args.verbosity >= 2:
-                    print("Data: " + repr(args.indexes))
                 raise RuntimeError("Number of column headers must equal number of data items.")
         else:
             fields = list(range(1, len(args.indexes)+1))
@@ -196,10 +196,10 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
         if args.verbosity >= 2:
             print("\
 def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (" + ','.join(args.indexes) + ")", file=sys.stderr)
+    return (list(itertools.izip_longest(*[" + ','.join(args.indexes) + "])))", file=sys.stderr)
         exec("\
 def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (" + ','.join(args.indexes) + ")", globals())
+    return (list(itertools.izip_longest(*[" + ','.join(args.indexes) + "])))", globals())
 
     if args.score_header is None:
         if args.score == ['1']:
@@ -333,9 +333,9 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                             print("    --> " + repr(rowscore), file=sys.stderr)
 
                     if args.ignorecase:
-                        index = (match.lower(),)
+                        index = match.lower()
                     else:
-                        index = (match,)
+                        index = match
 
                     if args.interval:
                         if args.verbosity >= 2:
@@ -439,9 +439,9 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                                     print("    --> " + repr(rowscore), file=sys.stderr)
 
                             if args.ignorecase:
-                                index = (match.lower(),)
+                                index = match.lower()
                             else:
-                                index = (match,)
+                                index = match
 
                             result[index] = map(add, result.get(index, [0] * len(args.score)), rowscore)
 
