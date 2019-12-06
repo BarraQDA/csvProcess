@@ -17,7 +17,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import print_function
-import gooey
 import argparse
 import os
 import sys
@@ -27,19 +26,34 @@ import subprocess
 
 # Work out whether the user wants gooey before gooey has a chance to strip the argument
 gui = '--gui' in sys.argv
+if gui:
+    try:
+        import gooey
+    except ImportError:
+        raise ImportError("You must install Gooey to use --gui")
 
 def add_arguments(parser):
-    parser.description = "Replay twitter file processing"
+    parser.description = "Replay CSV and logfiles based on their headers containing a command trail."
+
+    if not gui: # Add --gui argument so it appears in command usage.
+        parser.add_argument(      '--gui', action='store_true',
+                                 help='Open a window where arguments can be edited.')
 
     replaygroup = parser.add_argument_group('Replay')
-    replaygroup.add_argument('input_file', type=str, widget='FileChooser',
-                             help='File to replay.')
+    if gui:
+        replaygroup.add_argument('input_file', type=str, widget='FileChooser',
+                                help='File to replay.')
+    else:
+        replaygroup.add_argument('input_file', type=str, nargs='+',
+                                help='Files to replay.')
     replaygroup.add_argument('-f', '--force',   action='store_true',
                              help='Replay even if input file is not older than its dependents.')
     replaygroup.add_argument(      '--dry-run', action='store_true',
                              help='Print but do not execute command')
-    replaygroup.add_argument(      '--edit', action='store_false',
-                             help='Open a Gooey window to allow editing before running command')
+    replaygroup.add_argument(      '--edit', action='store_true',
+                             help='Add --gui argument when replaying commands. If supported, this will open a window to allow editing of the command arguments.')
+    replaygroup.add_argument(      '--substitute', nargs='*', type=str,
+                             help='List of variable:value pairs for substitution')
 
     advancedgroup = parser.add_argument_group('Advanced')
     advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
@@ -51,47 +65,22 @@ def add_arguments(parser):
     parser.set_defaults(func=csvReplay)
     parser.set_defaults(build_comments=build_comments)
 
-@gooey.Gooey(ignore_command=None, force_command='--gui',
-             default_cols=1,
-             load_cmd_args=True, use_argparse_groups=True, use_tabs=True)
-def parse_arguments():
-    parser = gooey.GooeyParser()
-    add_arguments(parser)
-    args = parser.parse_args()
-    return vars(args)
-
-# Need to replicate this because parse_known_args doesn't work with gooey
-def parse_arguments_no_gooey():
-    parser = argparse.ArgumentParser()
-
-    parser.description = "Replay twitter file processing"
-
-    replaygroup = parser.add_argument_group('Replay')
-    replaygroup.add_argument('input_file', type=str, nargs='+',
-                             help='Files to replay.')
-    replaygroup.add_argument('-f', '--force',   action='store_true',
-                             help='Replay even if infile is not older than its dependents.')
-    replaygroup.add_argument(      '--dry-run', action='store_true',
-                             help='Print but do not execute command')
-    replaygroup.add_argument(      '--edit', action='store_true',
-                             help='Open a Gooey window to allow editing before running command')
-    replaygroup.add_argument(      '--substitute', nargs='*', type=str,
-                             help='List of variable:value for substitution')
-
-    advancedgroup = parser.add_argument_group('Advanced')
-    advancedgroup.add_argument('-v', '--verbosity', type=int, default=1)
-    advancedgroup.add_argument('-d', '--depth',     type=int,
-                               help='Depth of command history to replay.')
-    advancedgroup.add_argument('-r', '--remove',   action='store_true',
-                               help='Remove file before replaying.')
-
-    parser.set_defaults(func=csvReplay)
-    parser.set_defaults(build_comments=build_comments)
-
-    args, extraargs = parser.parse_known_args()
-    args.extraargs = extraargs
-    args.substitute = { sub.split(':')[0]: sub.split(':')[1] for sub in args.substitute } if args.substitute else {}
-    return vars(args)
+if gui:
+    @gooey.Gooey(optional_cols=1, tabbed_groups=True)
+    def parse_arguments():
+        parser = gooey.GooeyParser()
+        add_arguments(parser)
+        args = parser.parse_args()
+        return vars(args)
+else:
+    def parse_arguments():
+        parser = argparse.ArgumentParser()
+        add_arguments(parser)
+        args, extraargs = parser.parse_known_args()
+        extraargs.remove('--ignore-gooey')  # Because Gooey adds this when it calls the command
+        args.extraargs = extraargs
+        args.substitute = { sub.split(':')[0]: sub.split(':')[1] for sub in args.substitute } if args.substitute else {}
+        return vars(args)
 
 def build_comments(kwargs):
     return ''
@@ -113,7 +102,7 @@ def csvReplay(input_file, force, dry_run, edit,
             print("Replaying " + infilename, file=sys.stderr)
 
         # Read comments at start of infile.
-        infile = file(infilename, 'rU')
+        infile = open(infilename, 'r')
         comments = []
         while True:
             line = infile.readline()
@@ -254,12 +243,8 @@ def csvReplay(input_file, force, dry_run, edit,
                 pipestack = None
 
 def main():
-    if gui:
-        kwargs = parse_arguments()
-        kwargs['func'](**kwargs)
-    else:
-        kwargs = parse_arguments_no_gooey()
-        kwargs['func'](**kwargs)
+    kwargs = parse_arguments()
+    kwargs['func'](**kwargs)
 
 if __name__ == '__main__':
     main()
