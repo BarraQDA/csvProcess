@@ -35,7 +35,7 @@ import itertools
 
 def csvFilter(arglist=None):
 
-    parser = argparse.ArgumentParser(description='CSV file processor.',
+    parser = argparse.ArgumentParser(description='Multi-functional CSV file filter.',
                                      fromfile_prefix_chars='@')
 
     parser.add_argument('-v', '--verbosity',  type=int, default=1)
