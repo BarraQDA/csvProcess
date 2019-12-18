@@ -27,6 +27,7 @@ import subprocess
 # Work out whether the user wants gooey before gooey has a chance to strip the argument
 gui = '--gui' in sys.argv
 if gui:
+    sys.argv.remove('--gui')
     try:
         import gooey
     except ImportError:
@@ -77,7 +78,8 @@ else:
         parser = argparse.ArgumentParser()
         add_arguments(parser)
         args, extraargs = parser.parse_known_args()
-        extraargs.remove('--ignore-gooey')  # Because Gooey adds this when it calls the command
+        if '--ignore-gooey' in extraargs:   # Gooey adds '--ignore-gooey' when it calls the command
+            extraargs.remove('--ignore-gooey')
         args.extraargs = extraargs
         args.substitute = { sub.split(':')[0]: sub.split(':')[1] for sub in args.substitute } if args.substitute else {}
         return vars(args)
