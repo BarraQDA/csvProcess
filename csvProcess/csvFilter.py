@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2017 Jonathan Schultz
+# Copyright 2019 Jonathan Schultz
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,12 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-import argparse
+import argrecord
 import sys
 import os
 import shutil
-import unicodecsv
+import csv
 import string
 import multiprocessing
 import pymp
@@ -35,12 +34,12 @@ import itertools
 
 def csvFilter(arglist=None):
 
-    parser = argparse.ArgumentParser(description='Multi-functional CSV file filter.',
-                                     fromfile_prefix_chars='@')
+    parser = argrecord.ArgumentRecorder(description='Multi-functional CSV file filter.',
+                                        fromfile_prefix_chars='@')
 
-    parser.add_argument('-v', '--verbosity',  type=int, default=1)
-    parser.add_argument('-j', '--jobs',       type=int, help='Number of parallel tasks, default is number of CPUs. May affect performance but not results.')
-    parser.add_argument('-b', '--batch',      type=int, default=100000, help='Number of rows to process per batch. Use to limit memory usage with very large files. May affect performance but not results.')
+    parser.add_argument('-v', '--verbosity',  type=int, default=1, private=True)
+    parser.add_argument('-j', '--jobs',       type=int, help='Number of parallel tasks, default is number of CPUs. May affect performance but not results.', private=True)
+    parser.add_argument('-b', '--batch',      type=int, default=100000, help='Number of rows to process per batch. Use to limit memory usage with very large files. May affect performance but not results.', private=True)
 
     parser.add_argument('-p', '--prelude',    type=str, nargs="*", help='Python code to execute before processing')
     parser.add_argument('-f', '--filter',     type=str, help='Python expression evaluated to determine whether row is included')
@@ -59,14 +58,14 @@ def csvFilter(arglist=None):
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
     parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce lists of values to output as columns.')
 
-    parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
+    parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.', output=True)
     parser.add_argument(      '--rejfile',    type=str, help='Output CSV file for rejected rows')
     parser.add_argument('-n', '--number',     type=int, help='Maximum number of results to output')
     parser.add_argument('--no-comments',      action='store_true', help='Do not output descriptive comments')
     parser.add_argument('--no-header',        action='store_true', help='Do not output CSV header with column names')
 
     parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
-    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
+    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.', input=True)
 
     global args, hiddenargs
     args = parser.parse_args(arglist)
@@ -90,7 +89,7 @@ def csvFilter(arglist=None):
         exec(os.linesep.join(args.prelude), globals())
 
     if args.regexp:
-        regexp = re.compile(args.regexp, re.UNICODE | (re.IGNORECASE if args.ignorecase else 0))
+        regexp = re.compile(args.regexp, re.IGNORECASE if args.ignorecase else 0)
         regexpfields = list(regexp.groupindex)
     else:
         regexpfields = None
@@ -99,26 +98,16 @@ def csvFilter(arglist=None):
     since = dateparser.parse(args.since) if args.since else None
 
     if args.infile:
-        infile = open(args.infile, 'rU')
+        infile = open(args.infile, 'r')
     elif args.pipe:
-        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True).stdout
+        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True, text=True).stdout.buffer
     else:
-        infile = sys.stdin
+        infile = sys.stdin.buffer
 
     # Read comments at start of infile.
-    incomments = ''
-    while True:
-        line = infile.readline().decode('utf8')
-        if line[:1] == '#':
-            incomments += line
-        else:
-            infieldnames = next(unicodecsv.reader([line]))
-            break
-
-    if not incomments:
-        incomments = '#' * 80 + '\n'
-
-    inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
+    incomments = argrecord.ArgumentHelper.read_comments(infile) or ('#' * 80 + '\n')
+    infieldnames = next(csv.reader([infile.readline()]))
+    inreader=csv.DictReader(infile, fieldnames=infieldnames)
 
     if args.outfile is None:
         outfile = sys.stdout
@@ -134,42 +123,10 @@ def csvFilter(arglist=None):
 
         rejfile = open(args.rejfile, 'w')
 
-    if args.no_comments:
-        outcomments = None
-        rejcomments = None
-    else:
-        comments = '# ' + os.path.basename(sys.argv[0]) + '\n'
-        arglist = args.__dict__.keys()
-        for arg in arglist:
-            if arg not in hiddenargs:
-                val = getattr(args, arg)
-                argstr = arg.replace('_', '-')
-                if type(val) == str or type(val) == unicode:
-                    comments += '#     --' + argstr + '="' + val + '"\n'
-                elif type(val) == bool:
-                    if val:
-                        comments += '#     --' + argstr + '\n'
-                elif type(val) == list:
-                    for valitem in val:
-                        if type(valitem) == str:
-                            comments += '#     --' + argstr + '="' + valitem + '"\n'
-                        else:
-                            comments += '#     --' + argstr + '=' + str(valitem) + '\n'
-                elif val is not None:
-                    comments += '#     --' + argstr + '=' + str(val) + '\n'
-
-        if args.outfile:
-            outcomments = (' ' + args.outfile + ' ').center(80, '#') + '\n'
-        else:
-            outcomments = '#' * 80 + '\n'
-
-        outcomments += comments + incomments
-        outfile.write(outcomments.encode('utf8'))
-
+    if not args.no_comments:
+        outfile.write(parser.build_comments(args, args.outfile) + incomments)
         if args.rejfile:
-            rejcomments = (' ' + args.rejfile + ' ').center(80, '#') + '\n'
-            rejcomments += comments + incomments
-            rejfile.write(rejcomments.encode('utf8'))
+            rejfile.write(parser.build_comments(args, args.rejfile) + incomments)
 
     if args.copy:
         if args.exclude:
@@ -190,12 +147,12 @@ def csvFilter(arglist=None):
     if regexpfields:
         outfieldnames += [fieldname for fieldname in regexpfields if fieldname not in outfieldnames]
 
-    outcsv=unicodecsv.DictWriter(outfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
+    outcsv=csv.DictWriter(outfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
 
     if not args.no_header:
         outcsv.writeheader()
     if args.rejfile:
-        rejcsv=unicodecsv.DictWriter(rejfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
+        rejcsv=csv.DictWriter(rejfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
         if not args.no_header:
             rejcsv.writeheader()
 
@@ -227,7 +184,7 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
 
     def loadrowdata(outrow, rowdata):
         if type(rowdata) == dict:
-            for key, value in rowdata.iteritems():
+            for key, value in rowdata.items():
                 outrow[key] = rowdata[key]
         elif type(rowdata) == tuple:
             for idx, value in enumerate(rowdata):
@@ -250,7 +207,7 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 break
             inrowcount += 1
 
-            rowargs = {clean(key): value for key, value in row.iteritems()}
+            rowargs = {clean(key): value for key, value in row.items()}
             keep = True
             if args.filter:
                 if args.verbosity >= 2:
@@ -343,7 +300,7 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 for rowindex in p.range(0, rowcount):
                     row = rows[rowindex]
 
-                    rowargs = {clean(key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.items()}
                     keep = True
                     if args.filter:
                         if args.verbosity >= 2:
