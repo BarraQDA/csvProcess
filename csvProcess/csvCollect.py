@@ -16,12 +16,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-import argparse
+import argrecord
 import sys
 import os
 import shutil
-import unicodecsv
+import csv
 import string
 import multiprocessing
 import pymp
@@ -34,15 +33,16 @@ import subprocess
 import datetime
 from decimal import *
 import itertools
+from more_itertools import peekable
 
 def csvCollect(arglist=None):
 
-    parser = argparse.ArgumentParser(description='CSV data collection.',
-                                     fromfile_prefix_chars='@')
+    parser = argrecord.ArgumentRecorder(description='CSV data collection.',
+                                        fromfile_prefix_chars='@')
 
-    parser.add_argument('-v', '--verbosity',  type=int, default=1)
-    parser.add_argument('-j', '--jobs',       type=int, help='Number of parallel tasks, default is number of CPUs. May affect performance but not results.')
-    parser.add_argument('-b', '--batch',      type=int, default=100000, help='Number of rows to process per batch. Use to limit memory usage with very large files. May affect performance but not results.')
+    parser.add_argument('-v', '--verbosity',  type=int, default=1, private=True)
+    parser.add_argument('-j', '--jobs',       type=int, help='Number of parallel tasks, default is number of CPUs. May affect performance but not results.', private=True)
+    parser.add_argument('-b', '--batch',      type=int, default=100000, help='Number of rows to process per batch. Use to limit memory usage with very large files. May affect performance but not results.', private=True)
 
     parser.add_argument('-p', '--prelude',    type=str, nargs="*", help='Python code to execute before processing')
     parser.add_argument('-f', '--filter',     type=str, help='Python expression evaluated to determine whether row is included')
@@ -51,7 +51,7 @@ def csvCollect(arglist=None):
     parser.add_argument(      '--datecol',    type=str, help='Column containing date/time date', default='date')
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
-    parser.add_argument('-r', '--regexp',     type=lambda s: unicode(s, 'utf8'), help='Regular expression to create values to collect.')
+    parser.add_argument('-r', '--regexp',     type=str, help='Regular expression to create values to collect.')
     parser.add_argument('-c', '--column',     type=str, help='Column to apply regular expression, default is "text"')
     parser.add_argument('-i', '--ignorecase', action='store_true', help='Ignore case in regular expression')
     parser.add_argument('-I', '--indexes',    type=str, nargs="*", help='Python code to produce lists of values to collect.')
@@ -65,16 +65,15 @@ def csvCollect(arglist=None):
 
     parser.add_argument('-S', '--sort',       type=str, nargs="?", help='Python expression used to sort rows.')
 
-    parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.')
+    parser.add_argument('-o', '--outfile',    type=str, help='Output CSV file, otherwise use stdout.', output=True)
     parser.add_argument('-n', '--number',     type=int, help='Maximum number of results to output')
     parser.add_argument('--no-comments',      action='store_true', help='Do not output descriptive comments')
     parser.add_argument('--no-header',        action='store_true', help='Do not output CSV header with column names')
 
     parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
-    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.')
+    parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.', input=True)
 
     args = parser.parse_args(arglist)
-    hiddenargs = ['verbosity', 'jobs', 'batch', 'preset', 'no_comments']
 
     if (args.regexp is None) == (args.indexes is None):
         raise RuntimeError("Exactly one of 'indexes' and 'regexp' must be specified.")
@@ -104,7 +103,7 @@ def csvCollect(arglist=None):
 
     fields = []
     if args.regexp:
-        regexp = re.compile(args.regexp, re.UNICODE | (re.IGNORECASE if args.ignorecase else 0))
+        regexp = re.compile(args.regexp, re.IGNORECASE if args.ignorecase else 0)
         fields += list(regexp.groupindex)
 
     if args.indexes:
@@ -126,26 +125,16 @@ def csvCollect(arglist=None):
             print("Interval is " + str(interval), file=sys.stderr)
 
     if args.infile:
-        infile = open(args.infile, 'rU')
+        infile = peekable(open(args.infile, 'r'))
     elif args.pipe:
-        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True).stdout
+        infile = peekable(subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True, text=True).stdout)
     else:
-        infile = sys.stdin
+        infile = peekable(sys.stdin)
 
     # Read comments at start of infile.
-    incomments = ''
-    while True:
-        line = infile.readline().decode('utf8')
-        if line[:1] == '#':
-            incomments += line
-        else:
-            infieldnames = next(unicodecsv.reader([line]))
-            break
-
-    if not incomments:
-        incomments = '#' * 80 + '\n'
-
-    inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
+    incomments = argrecord.ArgumentHelper.read_comments(infile) or ('#' * 80 + '\n')
+    infieldnames = next(csv.reader([next(infile)]))
+    inreader=csv.DictReader(infile, fieldnames=infieldnames)
 
     if args.outfile is None:
         outfile = sys.stdout
@@ -155,29 +144,7 @@ def csvCollect(arglist=None):
 
         outfile = open(args.outfile, 'w')
 
-    if not args.no_comments:
-        comments = ((' ' + args.outfile + ' ') if args.outfile else '').center(80, '#') + '\n'
-        comments += '# ' + os.path.basename(sys.argv[0]) + '\n'
-        arglist = args.__dict__.keys()
-        for arg in arglist:
-            if arg not in hiddenargs:
-                val = getattr(args, arg)
-                argstr = arg.replace('_', '-')
-                if type(val) == str or type(val) == unicode:
-                    comments += '#     --' + argstr + '="' + val + '"\n'
-                elif type(val) == bool:
-                    if val:
-                        comments += '#     --' + argstr + '\n'
-                elif type(val) == list:
-                    for valitem in val:
-                        if type(valitem) == str:
-                            comments += '#     --' + argstr + '="' + valitem + '"\n'
-                        else:
-                            comments += '#     --' + argstr + '=' + str(valitem) + '\n'
-                elif val is not None:
-                    comments += '#     --' + argstr + '=' + str(val) + '\n'
-
-        outfile.write((comments + incomments).encode('utf8'))
+    outfile.write(parser.build_comments(args, args.outfile) + incomments)
 
     # Dynamic code for filter, data and score
     def clean(v):
@@ -196,10 +163,10 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
         if args.verbosity >= 2:
             print("\
 def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (list(itertools.izip_longest(*[" + ','.join(args.indexes) + "])))", file=sys.stderr)
+    return (list(itertools.zip_longest(*[" + ','.join(args.indexes) + "])))", file=sys.stderr)
         exec("\
 def evalindexes(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n\
-    return (list(itertools.izip_longest(*[" + ','.join(args.indexes) + "])))", globals())
+    return (list(itertools.zip_longest(*[" + ','.join(args.indexes) + "])))", globals())
 
     if args.score_header is None:
         if args.score == ['1']:
@@ -221,7 +188,7 @@ def evalsort(" + ','.join([clean(fieldname) for fieldname in fields+args.score_h
     return (" + args.sort + ")", globals())
 
         def sortkey(row):
-            rowargs = {clean(key): value for key, value in row.iteritems()}
+            rowargs = {clean(key): value for key, value in row.items()}
             return evalsort(**rowargs)
 
     if args.verbosity >= 2:
@@ -250,7 +217,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                 while True:
                     row = next(inreader)
                     inrowcount += 1
-                    rowargs = {clean(key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.items()}
                     keep = True
                     if args.filter:
                         if args.verbosity >= 2:
@@ -281,7 +248,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                     indexes  = firstrow['indexes']
                     rowscore = firstrow['score']
                     for index in indexes:
-                        runningresult[index] = map(sub, runningresult[index], rowscore)
+                        runningresult[index] = list(map(sub, runningresult[index], rowscore))
 
                     del rows[0]
                     firstrow = rows[0] if len(rows) else None
@@ -308,11 +275,11 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                         if args.verbosity >= 2:
                             print("index = " + repr(index), file=sys.stderr)
                         indexes.append(index)
-                        runningresult[index] = map(add, runningresult.get(index, [0] * len(args.score)), rowscore)
+                        runningresult[index] = list(map(add, runningresult.get(index, [0] * len(args.score)), rowscore))
                         curmergedresult = mergedresult.get(index, [0] * len(args.score))
                         mergedresult[index] = [max(curmergedresult[idx], runningresult[index][idx]) for idx in range(len(args.score))]
                     else:
-                        mergedresult[index] = map(add, mergedresult.get(index, [0] * len(args.score)), rowscore)
+                        mergedresult[index] = list(map(add, mergedresult.get(index, [0] * len(args.score)), rowscore))
 
             if args.indexes:
                 if args.verbosity >= 2:
@@ -321,7 +288,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                 if args.verbosity >= 2:
                     print("    --> " + repr(matches), file=sys.stderr)
                 if args.verbosity >= 1:
-                    if type(matches) <> list:
+                    if type(matches) != list:
                         print("WARNING: evalindexes should return a list, your 'indexes' argument is probably incorrect!", file=sys.stderr)
 
                 for match in matches:
@@ -341,11 +308,11 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                         if args.verbosity >= 2:
                             print("index = " + repr(index), file=sys.stderr)
                         indexes.append(index)
-                        runningresult[index] = map(add, runningresult.get(index, [0] * len(args.score)), rowscore)
+                        runningresult[index] = list(map(add, runningresult.get(index, [0] * len(args.score)), rowscore))
                         curmergedresult = mergedresult.get(index, [0] * len(args.score))
                         mergedresult[index] = [max(curmergedresult[idx], runningresult[index][idx]) for idx in range(len(args.score))]
                     else:
-                        mergedresult[index] = map(add, mergedresult.get(index, [0] * len(args.score)), rowscore)
+                        mergedresult[index] = list(map(add, mergedresult.get(index, [0] * len(args.score)), rowscore))
 
             if args.interval and rowscore:
                 row['score']   = rowscore
@@ -381,7 +348,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                 result = {}
                 for rowindex in p.range(0, rowcount):
                     row = rows[rowindex]
-                    rowargs = {clean(key): value for key, value in row.iteritems()}
+                    rowargs = {clean(key): value for key, value in row.items()}
                     keep = True
                     if args.filter:
                         if args.verbosity >= 2:
@@ -418,7 +385,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                             else:
                                 index = tuple(match.groupdict().values())
 
-                            result[index] = map(add, result.get(index, [0] * len(args.score)), rowscore)
+                            result[index] = list(map(add, result.get(index, [0] * len(args.score)), rowscore))
 
                     if args.indexes:
                         if args.verbosity >= 2:
@@ -427,7 +394,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                         if args.verbosity >= 2:
                             print("    --> " + repr(matches), file=sys.stderr)
                         if args.verbosity >= 1:
-                            if type(matches) <> list:
+                            if type(matches) != list:
                                 print("WARNING: evalindexes should return a list, your 'indexes' argument is probably incorrect!", file=sys.stderr)
 
                         for match in matches:
@@ -443,7 +410,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
                             else:
                                 index = match
 
-                            result[index] = map(add, result.get(index, [0] * len(args.score)), rowscore)
+                            result[index] = list(map(add, result.get(index, [0] * len(args.score)), rowscore))
 
                 if args.verbosity >= 2:
                     print("Thread " + str(p.thread_num) + " found " + str(len(result)) + " results.", file=sys.stderr)
@@ -453,7 +420,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
 
             for result in results:
                 for index in result:
-                    mergedresult[index] = map(add, mergedresult.get(index, [0] * len(args.score)), result[index])
+                    mergedresult[index] = list(map(add, mergedresult.get(index, [0] * len(args.score)), result[index]))
 
     if args.verbosity >= 1:
         print("Sorting " + str(len(mergedresult)) + " results.", file=sys.stderr)
@@ -463,7 +430,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
     if args.sort:
         results = []
         for match in mergedresult.keys():
-            if mergedresult[match][0] >= args.threshold or 0:
+            if mergedresult[match][0] >= (args.threshold or 0):
                 result = {}
                 for idx in range(len(fields)):
                     result[fields[idx]] = match[idx]
@@ -478,7 +445,7 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
     else:
         # Sort on first score value
         sortedresult = sorted([{'match': match, 'score':mergedresult[match]}
-                                for match in mergedresult.keys() if mergedresult[match][0] >= args.threshold or 0],
+                                for match in mergedresult.keys() if mergedresult[match][0] >= (args.threshold or 0)],
                                 key=lambda item: (-item['score'][0], item['match']))
 
         if args.number:
@@ -490,12 +457,12 @@ def evalscore(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + "
             for idx in range(len(args.score)):
                 result[args.score_header[idx]] = result['score'][idx]
 
-    outunicodecsv=unicodecsv.DictWriter(outfile, fieldnames=fields + args.score_header,
-                                        extrasaction='ignore', lineterminator=os.linesep)
+    outcsv=csv.DictWriter(outfile, fieldnames=fields + args.score_header,
+                          extrasaction='ignore', lineterminator=os.linesep)
     if not args.no_header:
-        outunicodecsv.writeheader()
+        outcsv.writeheader()
     if len(sortedresult) > 0:
-        outunicodecsv.writerows(sortedresult)
+        outcsv.writerows(sortedresult)
     outfile.close()
 
 if __name__ == '__main__':

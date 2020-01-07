@@ -31,6 +31,7 @@ import calendar
 import subprocess
 from decimal import *
 import itertools
+from more_itertools import peekable
 
 def csvFilter(arglist=None):
 
@@ -67,9 +68,8 @@ def csvFilter(arglist=None):
     parser.add_argument('-P', '--pipe', type=str,            help='Command to pipe input from')
     parser.add_argument('infile',       type=str, nargs='?', help='Input CSV file, if neither input nor pipe is specified, stdin is used.', input=True)
 
-    global args, hiddenargs
+    global args
     args = parser.parse_args(arglist)
-    hiddenargs = ['verbosity', 'jobs', 'batch', 'no_comments']
 
     if args.jobs is None:
         args.jobs = multiprocessing.cpu_count()
@@ -98,15 +98,15 @@ def csvFilter(arglist=None):
     since = dateparser.parse(args.since) if args.since else None
 
     if args.infile:
-        infile = open(args.infile, 'r')
+        infile = peekable(open(args.infile, 'r'))
     elif args.pipe:
-        infile = subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True, text=True).stdout.buffer
+        infile = peekable(subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True, text=True).stdout)
     else:
-        infile = sys.stdin.buffer
+        infile = peekable(sys.stdin)
 
     # Read comments at start of infile.
     incomments = argrecord.ArgumentHelper.read_comments(infile) or ('#' * 80 + '\n')
-    infieldnames = next(csv.reader([infile.readline()]))
+    infieldnames = next(csv.reader([next(infile)]))
     inreader=csv.DictReader(infile, fieldnames=infieldnames)
 
     if args.outfile is None:
@@ -135,6 +135,7 @@ def csvFilter(arglist=None):
             outfieldnames = list(infieldnames)
     else:
         outfieldnames = []
+
     if args.data:
         if args.header:
             #if len(args.header) != len(args.data):
@@ -151,6 +152,7 @@ def csvFilter(arglist=None):
 
     if not args.no_header:
         outcsv.writeheader()
+
     if args.rejfile:
         rejcsv=csv.DictWriter(rejfile, fieldnames=outfieldnames, extrasaction='ignore', lineterminator=os.linesep)
         if not args.no_header:
@@ -173,7 +175,7 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
 def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n"
         if len(args.data) > 1:
             evaldatacode += "\
-    return (list(itertools.izip_longest(*[" + ','.join(args.data) + "])))"
+    return (list(itertools.zip_longest(*[" + ','.join(args.data) + "])))"
         else:
             evaldatacode += "\
     return (" + args.data[0] + ")"
