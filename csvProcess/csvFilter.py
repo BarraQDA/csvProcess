@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import argrecord
+from argrecord import ArgumentHelper, ArgumentRecorder
 import sys
 import os
 import shutil
@@ -35,8 +35,8 @@ from more_itertools import peekable
 
 def csvFilter(arglist=None):
 
-    parser = argrecord.ArgumentRecorder(description='Multi-functional CSV file filter.',
-                                        fromfile_prefix_chars='@')
+    parser = ArgumentRecorder(description='Multi-functional CSV file filter.',
+                              fromfile_prefix_chars='@')
 
     parser.add_argument('-v', '--verbosity',  type=int, default=1, private=True)
     parser.add_argument('-j', '--jobs',       type=int, help='Number of parallel tasks, default is number of CPUs. May affect performance but not results.', private=True)
@@ -98,14 +98,14 @@ def csvFilter(arglist=None):
     since = dateparser.parse(args.since) if args.since else None
 
     if args.infile:
-        infile = peekable(open(args.infile, 'r'))
+        infile = open(args.infile, 'r')
     elif args.pipe:
         infile = peekable(subprocess.Popen(args.pipe, stdout=subprocess.PIPE, shell=True, text=True).stdout)
     else:
         infile = peekable(sys.stdin)
 
     # Read comments at start of infile.
-    incomments = argrecord.ArgumentHelper.read_comments(infile) or ('#' * 80 + '\n')
+    incomments = ArgumentHelper.read_comments(infile) or ArgumentHelper.separator()
     infieldnames = next(csv.reader([next(infile)]))
     inreader=csv.DictReader(infile, fieldnames=infieldnames)
 
