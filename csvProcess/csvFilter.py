@@ -191,7 +191,7 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
         elif type(rowdata) == tuple:
             for idx, value in enumerate(rowdata):
                 key = datafieldnames[idx] if idx < len(datafieldnames) else str(idx)
-                outrow[key] = str(value)
+                outrow[key] = str(value) if value is not None else ''
         elif rowdata is not None:
             key = datafieldnames[0] if 0 < len(datafieldnames) else '0'
             outrow[key] = str(rowdata)
