@@ -32,6 +32,7 @@ import subprocess
 from decimal import *
 import itertools
 from more_itertools import peekable
+import builtins
 
 def csvFilter(arglist=None):
 
@@ -174,7 +175,7 @@ def evalfilter(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + 
 def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",**kwargs):\n"
         if len(args.data) > 1:
             evaldatacode += "\
-    return (list(itertools.zip_longest(*[" + ','.join(args.data) + "])))"
+    return (list(itertools.zip_longest(*[" + ','.join(["(" + item + " if builtins.type(" + item + ") == list else [" + item + "])" for item in args.data])+"])))"
         else:
             evaldatacode += "\
     return (" + args.data[0] + ")"
@@ -236,7 +237,7 @@ def evaldata(" + ','.join([clean(fieldname) for fieldname in infieldnames]) + ",
                 outrow.update({regexpfield: regexpmatch.group(regexpfield) for regexpfield in regexpfields})
             if args.data:
                 if args.verbosity >= 2:
-                    print("evaldata(" + repr(rowargs) + ")", file=sys.stderr)
+                    print("evaldata(**" + repr(rowargs) + ")", file=sys.stderr)
                 rowdata = evaldata(**rowargs)
                 if args.verbosity >= 2:
                     print("    --> " + repr(rowdata), file=sys.stderr)
