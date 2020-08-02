@@ -54,7 +54,7 @@ def csvFilter(arglist=None):
     parser.add_argument(      '--datecol',    type=str, help='Column containing date/time date', default='date')
     parser.add_argument('-l', '--limit',      type=int, help='Limit number of rows to process')
 
-    parser.add_argument('-C', '--copy',       action='store_true', help='If true, copy all columns from input file.')
+    parser.add_argument('-C', '--copy',       type=str, nargs="*", help='Columns to copy from input file; if none specified then copy all columns.')
     parser.add_argument('-x', '--exclude',    type=str, nargs="*", help='Columns to exclude from copy')
     parser.add_argument('-H', '--header',     type=str, nargs="*", help='Column names to create.')
     parser.add_argument('-d', '--data',       type=str, nargs="*", help='Python code to produce lists of values to output as columns.')
@@ -128,11 +128,8 @@ def csvFilter(arglist=None):
         if args.rejfile:
             rejfile.write(parser.build_comments(args, args.rejfile) + incomments)
 
-    if args.copy:
-        if args.exclude:
-            outfieldnames = [fieldname for fieldname in infieldnames if fieldname not in args.exclude]
-        else:
-            outfieldnames = list(infieldnames)
+    if args.copy is not None:
+        outfieldnames = [fieldname for fieldname in (args.copy if args.copy else infieldnames) if fieldname not in (args.exclude or [])]
     else:
         outfieldnames = []
 
@@ -142,6 +139,8 @@ def csvFilter(arglist=None):
                 #raise RuntimeError("Number of headers must equal number of data items.")
 
             datafieldnames = [fieldname for fieldname in args.header]
+        else:
+            datafieldnames = [fieldname for fieldname in args.data]
 
         outfieldnames += [fieldname for fieldname in datafieldnames if fieldname not in outfieldnames]
 
