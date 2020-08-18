@@ -110,6 +110,9 @@ def csvFilter(arglist=None):
     infieldnames = next(csv.reader([next(infile)]))
     inreader=csv.DictReader(infile, fieldnames=infieldnames)
 
+    if (since or until) and args.datecol not in infieldnames:
+        raise RuntimeError("Column '" + args.datecol + "' not present in input data.")
+
     if args.outfile is None:
         outfile = sys.stdout
     else:
