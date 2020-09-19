@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name = "csvProcess",
     packages = ["csvProcess"],
-    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "python-dateutil", "pytimeparse"],
+    install_requires = ["argparse", "unicodecsv", "pymp-pypi", "python-dateutil", "pytimeparse", "numpy", "more_itertools"],
     entry_points = {
         "gui_scripts": ['csvReplay  = csvProcess.csvReplay:main',
                         'csvCollect = csvProcess.csvCollect:csvCollect',
