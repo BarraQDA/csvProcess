@@ -162,7 +162,7 @@ def csvFilter(arglist=None):
             rejcsv.writeheader()
 
     def clean(v):
-        return re.sub('\W|^(?=\d)','_', v)
+        return re.sub(r"\W|^(?=\d)",'_', v)
 
     if args.filter:
         if args.verbosity >= 2:

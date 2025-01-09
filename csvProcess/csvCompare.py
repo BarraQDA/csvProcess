@@ -78,7 +78,7 @@ def csvCompare(arglist):
         outfile.write(parser.build_comments(args, args.outfile) + ((incomments1 + incomments2) or ArgumentHelper.separator()))
 
     def clean(v):
-        return re.sub('\W|^(?=\d)','_', v)
+        return re.sub(r"\W|^(?=\d)",'_', v)
 
     exec("\
 def evalscore1(" + ','.join([clean(fieldname) for fieldname in infieldnames1]) + ",**kwargs):\n\

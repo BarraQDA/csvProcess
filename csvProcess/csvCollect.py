@@ -149,7 +149,7 @@ def csvCollect(arglist=None):
 
     # Dynamic code for filter, data and score
     def clean(v):
-        return re.sub('\W|^(?=\d)','_', str(v))
+        return re.sub(r"\W|^(?=\d)",'_', str(v))
 
     if args.filter:
         if args.verbosity >= 2:

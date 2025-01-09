@@ -132,7 +132,7 @@ def csvCloud(arglist):
 
     inreader=unicodecsv.DictReader(infile, fieldnames=infieldnames)
 
-    argbadchars = re.compile(r'[^0-9a-zA-Z_]')
+    argbadchars = re.compile(r"[^0-9a-zA-Z_]")
     if args.filter:
         exec "\
 def evalfilter(" + ','.join([argbadchars.sub('_', fieldname) for fieldname in twitterread.fieldnames]) + ",**kwargs):\n\
